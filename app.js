@@ -36,6 +36,8 @@
       tabMeds: "2. Medications",
       medEmpty: "No medications added yet. Add the first one above.",
       saveTitle: "Save / load bag",
+      saveHint: "Everything stays on this device — nothing is uploaded. Exports are named " +
+        "after the drug bag number, e.g. Drug-Bag-1-saved.json.",
       generateHint: "A4 PDF: page 1 is the bag label, followed by one usage log per medication.",
       checkedByHint: "The label page carries a prepared-by / checked-by signature block. " +
         "Leave blank to sign it by hand.",
@@ -54,6 +56,8 @@
       tabMeds: "2. Controlled drugs",
       medEmpty: "No controlled drugs added yet. Add the first one above.",
       saveTitle: "Save / load register",
+      saveHint: "Everything stays on this device — nothing is uploaded. Exports are named " +
+        "after the CD safe reference, e.g. CD-Register-2-saved.json.",
       generateHint: "A4 PDF: a register front sheet, a running-balance register per drug, " +
         "and a landscape sign-out sheet for drugs taken from the safe into a personal pouch.",
       checkedByHint: "The front sheet carries a stock check signature block for both people.",
@@ -98,6 +102,7 @@
     $("tabMedsLabel").textContent = w.tabMeds;
     $("medEmpty").textContent = w.medEmpty;
     $("saveTitle").textContent = w.saveTitle;
+    $("saveHint").textContent = w.saveHint;
     $("generateHint").textContent = w.generateHint;
     $("checkedByHint").textContent = w.checkedByHint;
 
