@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drug Bag Tracker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b6b3a'/%3E%3Cpath d='M14 6h4v8h8v4h-8v8h-4v-8H6v-4h8z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="cross" aria-hidden="true">+</span>
+    <div>
+      <h1>Drug Bag Tracker</h1>
+      <p>Medication label &amp; usage log generator</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button type="button" class="btn ghost" id="resetAll">Clear all</button>
+    <button type="button" class="btn primary" id="generateTop">Generate PDF</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" role="tab" data-tab="setup" aria-selected="true">1. Setup</button>
+  <button class="tab" role="tab" data-tab="meds" aria-selected="false">2. Medications <span class="pill" id="medCount">0</span></button>
+  <button class="tab" role="tab" data-tab="generate" aria-selected="false">3. Generate</button>
+</nav>
+
+<main>
+  <!-- ============ SETUP ============ -->
+  <section class="panel active" id="panel-setup" role="tabpanel">
+    <div class="card">
+      <h2>Company details</h2>
+      <p class="hint">These appear on the bag label and in the "if found" notice.</p>
+      <div class="grid">
+        <label class="field">
+          <span>Company name <b>*</b></span>
+          <input type="text" id="companyName" placeholder="e.g. Northern Event Medical Ltd" autocomplete="organization">
+        </label>
+        <label class="field">
+          <span>Contact number <b>*</b></span>
+          <input type="tel" id="companyPhone" placeholder="e.g. 01234 567890" autocomplete="tel">
+        </label>
+        <label class="field span2">
+          <span>Address</span>
+          <textarea id="companyAddress" rows="3" placeholder="Unit 4, Example Way, Townsville, AB1 2CD"></textarea>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Bag details</h2>
+      <div class="grid">
+        <label class="field">
+          <span>Drug bag number <b>*</b></span>
+          <input type="text" id="bagNumber" placeholder="e.g. DB-014">
+        </label>
+        <label class="field">
+          <span>Prepped by <b>*</b></span>
+          <input type="text" id="preppedBy" placeholder="Name of person who prepped the bag">
+        </label>
+        <label class="field">
+          <span>Prepped date</span>
+          <input type="date" id="preppedDate">
+        </label>
+        <label class="field">
+          <span>Seal number</span>
+          <input type="text" id="sealNumber" placeholder="Optional">
+        </label>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn primary" data-goto="meds">Next: Medications &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ============ MEDICATIONS ============ -->
+  <section class="panel" id="panel-meds" role="tabpanel">
+    <div class="card">
+      <h2 id="medFormTitle">Add medication</h2>
+      <form id="medForm" novalidate>
+        <div class="grid">
+          <label class="field span2">
+            <span>Medication <b>*</b></span>
+            <input type="text" id="mName" placeholder="e.g. Paracetamol infant suspension">
+          </label>
+          <label class="field">
+            <span>Presentation <b>*</b></span>
+            <input type="text" id="mPresentation" list="presentationList" placeholder="e.g. Sachet">
+            <datalist id="presentationList">
+              <option value="Tablet"><option value="Sachet"><option value="Capsule">
+              <option value="Dispersible tablet"><option value="Instant melt tabs">
+              <option value="Pre-filled syringe"><option value="Ampoule"><option value="Vial">
+              <option value="Nebule"><option value="Inhaler"><option value="Suppository">
+            </datalist>
+          </label>
+          <label class="field">
+            <span>Dose / strength <b>*</b></span>
+            <input type="text" id="mDose" placeholder="e.g. 120mg/5ml">
+          </label>
+          <label class="field">
+            <span>Batch number</span>
+            <input type="text" id="mBatch" placeholder="e.g. X2257R">
+          </label>
+          <label class="field">
+            <span>Expiry <b>*</b></span>
+            <input type="text" id="mExpiry" placeholder="e.g. 07/25 or 2025-07">
+          </label>
+          <label class="field">
+            <span>Number of doses <b>*</b></span>
+            <input type="number" id="mDoses" min="1" max="200" step="1" placeholder="e.g. 12">
+          </label>
+          <label class="field">
+            <span>Schedule</span>
+            <select id="mSchedule">
+              <option value="GSL">GSL — General sales list</option>
+              <option value="P">P — Pharmacy only</option>
+              <option value="POM">POM — Prescription only</option>
+              <option value="S17">S17 — Exemption (e.g. naloxone)</option>
+              <option value="CD">CD — Controlled drug</option>
+            </select>
+          </label>
+        </div>
+        <p class="error" id="medError" hidden></p>
+        <div class="actions">
+          <button type="submit" class="btn primary" id="medSubmit">Add medication</button>
+          <button type="button" class="btn ghost" id="medCancel" hidden>Cancel edit</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Bag contents <span class="pill" id="medCount2">0</span></h2>
+      <div id="medList" class="med-list"></div>
+      <p class="empty" id="medEmpty">No medications added yet. Add the first one above.</p>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn ghost" data-goto="setup">&larr; Back</button>
+      <button type="button" class="btn primary" data-goto="generate">Next: Generate &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ============ GENERATE ============ -->
+  <section class="panel" id="panel-generate" role="tabpanel">
+    <div class="card">
+      <h2>Generate document</h2>
+      <p class="hint">A4 PDF: page 1 is the bag label, followed by one usage log per medication.</p>
+      <div id="summary" class="summary"></div>
+      <p class="error" id="genError" hidden></p>
+      <div class="actions">
+        <button type="button" class="btn primary big" id="generateBtn">Download PDF</button>
+        <button type="button" class="btn ghost" id="previewBtn">Preview in new tab</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Save / load bag</h2>
+      <p class="hint">Everything stays on this device — nothing is uploaded. Export a bag to reuse it next time.</p>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="exportBtn">Export bag (.json)</button>
+        <button type="button" class="btn ghost" id="importBtn">Import bag (.json)</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn ghost" data-goto="meds">&larr; Back</button>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">Runs entirely in your browser · PDF by jsPDF</footer>
+
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="pdf.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
