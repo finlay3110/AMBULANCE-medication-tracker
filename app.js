@@ -9,7 +9,7 @@
 
   var SETUP_FIELDS = [
     "companyName", "companyPhone", "companyAddress",
-    "bagNumber", "preppedBy", "preppedDate", "sealNumber"
+    "bagNumber", "preppedBy", "checkedBy", "preppedDate", "sealNumber"
   ];
 
   /* ---------------- persistence ---------------- */
@@ -70,7 +70,8 @@
       batch: $("mBatch").value.trim(),
       expiry: $("mExpiry").value.trim(),
       doses: parseInt($("mDoses").value, 10),
-      schedule: $("mSchedule").value
+      schedule: $("mSchedule").value,
+      cdLog: $("mCdLog").checked
     };
   }
 
@@ -79,6 +80,10 @@
     if (!m.presentation) return "Enter the presentation (tablet, sachet, ampoule…).";
     if (!m.dose) return "Enter the dose or strength.";
     if (!m.expiry) return "Enter the expiry.";
+    if (!window.Expiry.parse(m.expiry)) {
+      return "Expiry \u201c" + m.expiry + "\u201d was not understood. Use a month " +
+        "(07/25, 10/2027, Oct 2025) or a full date (18/10/2025).";
+    }
     if (!m.doses || m.doses < 1) return "Number of doses must be at least 1.";
     if (m.doses > 200) return "Number of doses is capped at 200 per medication.";
     return null;
@@ -89,6 +94,8 @@
       $(id).value = "";
     });
     $("mSchedule").value = "GSL";
+    $("mCdLog").checked = false;
+    updateExpiryEcho();
     state.editing = null;
     $("medFormTitle").textContent = "Add medication";
     $("medSubmit").textContent = "Add medication";
@@ -105,6 +112,8 @@
     $("mExpiry").value = m.expiry;
     $("mDoses").value = m.doses;
     $("mSchedule").value = m.schedule || "GSL";
+    $("mCdLog").checked = usesCdLog(m);
+    updateExpiryEcho();
     state.editing = index;
     $("medFormTitle").textContent = "Edit medication";
     $("medSubmit").textContent = "Save changes";
@@ -122,6 +131,42 @@
     if (state.editing === index) state.editing = to;
     save();
     renderMeds();
+  }
+
+
+  function usesCdLog(m) {
+    return m.cdLog === true || (m.cdLog === undefined && m.schedule === "CD");
+  }
+
+  /* Live confirmation of how the typed expiry was read. */
+  function updateExpiryEcho() {
+    var el = $("mExpiryEcho");
+    var raw = $("mExpiry").value.trim();
+    if (!raw) {
+      el.className = "echo";
+      el.textContent = "Month or full date \u2014 07/25, 10/2027, 18/10/2025, Oct 2025";
+      return;
+    }
+    var p = window.Expiry.parse(raw);
+    if (!p) {
+      el.className = "echo bad";
+      el.textContent = "Not understood. Try 07/25, 10/2027, Oct 2025 or 18/10/2025.";
+      return;
+    }
+    var st = window.Expiry.status(p);
+    var days = window.Expiry.daysLeft(p);
+    var reads = "Reads as " + window.Expiry.format(p) +
+      (p.precision === "month" ? " (in date to the end of that month)" : "");
+    if (st === "expired") {
+      el.className = "echo bad";
+      el.textContent = reads + " \u2014 already expired.";
+    } else if (st === "soon") {
+      el.className = "echo warn";
+      el.textContent = reads + " \u2014 expires in " + days + " days.";
+    } else {
+      el.className = "echo good";
+      el.textContent = reads + ".";
+    }
   }
 
   function renderMeds() {
@@ -196,7 +241,8 @@
     box.textContent = "";
     items.forEach(function (it) {
       var d = document.createElement("dl");
-      d.className = "sum-item";
+      d.className = "sum-item" +
+        (it[2] === "expired" ? " bad" : it[2] === "soon" ? " warn" : "");
       var dt = document.createElement("dt");
       dt.textContent = it[0];
       var dd = document.createElement("dd");
@@ -204,6 +250,29 @@
       d.appendChild(dt); d.appendChild(dd);
       box.appendChild(d);
     });
+
+    var warn = $("expiryWarning");
+    var expired = state.medications.filter(function (m) {
+      return window.Expiry.status(window.Expiry.parse(m.expiry)) === "expired";
+    });
+    var soon = state.medications.filter(function (m) {
+      return window.Expiry.status(window.Expiry.parse(m.expiry)) === "soon";
+    });
+    if (expired.length) {
+      warn.className = "notice bad";
+      warn.textContent = expired.length + " medication" + (expired.length === 1 ? " is" : "s are") +
+        " already expired: " + expired.map(function (m) { return m.name; }).join(", ") +
+        ". Replace before the bag goes into service.";
+      warn.hidden = false;
+    } else if (soon.length) {
+      warn.className = "notice warn";
+      warn.textContent = soon.length + " medication" + (soon.length === 1 ? "" : "s") +
+        " expire within " + window.Expiry.SOON_DAYS + " days: " +
+        soon.map(function (m) { return m.name; }).join(", ") + ".";
+      warn.hidden = false;
+    } else {
+      warn.hidden = true;
+    }
   }
 
   /* ---------------- generate ---------------- */
@@ -245,6 +314,16 @@
   }
 
   /* ---------------- import / export ---------------- */
+  /* "Drug bag 1" exports as Drug-Bag-1-saved.json */
+  function exportName() {
+    var id = (state.setup.bagNumber || "")
+      .trim()
+      .replace(/^(drug\s*bag|bag|db)[\s._-]*/i, "")   // avoid "Drug-Bag-Drug-Bag-1"
+      .replace(/[^A-Za-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return "Drug-Bag-" + (id || "unnumbered") + "-saved.json";
+  }
+
   function exportBag() {
     readSetup();
     var blob = new Blob([JSON.stringify({
@@ -253,7 +332,7 @@
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
-    a.download = "drug-bag-" + (state.setup.bagNumber || "bag").replace(/[^A-Za-z0-9_-]+/g, "-") + ".json";
+    a.download = exportName();
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -311,6 +390,11 @@
       $("mName").focus();
     });
     $("medCancel").addEventListener("click", clearMedForm);
+    $("mExpiry").addEventListener("input", updateExpiryEcho);
+    $("mSchedule").addEventListener("change", function () {
+      // Controlled drugs default to the register layout; still overridable.
+      if (this.value === "CD") $("mCdLog").checked = true;
+    });
 
     $("generateBtn").addEventListener("click", function () {
       withData(function (d) { window.DrugBagPDF.save(d); });

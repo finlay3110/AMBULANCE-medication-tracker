@@ -18,6 +18,31 @@
   var HEAD_BG = [166, 166, 166];
   var BAR_BG = [90, 90, 90];
   var SOFT_BG = [242, 244, 246];
+  var RED = [176, 32, 32];
+  var AMBER = [166, 108, 0];
+  var CD_BG = [139, 26, 26];
+
+  function expiryOf(med) {
+    return global.Expiry ? global.Expiry.parse(med.expiry) : null;
+  }
+
+  function expiryText(med) {
+    var p = expiryOf(med);
+    return p ? global.Expiry.format(p) : txt(med.expiry);
+  }
+
+  function expiryColour(med) {
+    if (!global.Expiry) return null;
+    var st = global.Expiry.status(expiryOf(med));
+    if (st === "expired") return RED;
+    if (st === "soon") return AMBER;
+    return null;
+  }
+
+  /* Does this medication get the controlled-drug register layout? */
+  function isCd(med) {
+    return med.cdLog === true || (med.cdLog === undefined && txt(med.schedule) === "CD");
+  }
 
   function txt(v) {
     return (v === null || v === undefined) ? "" : String(v).trim();
@@ -90,6 +115,51 @@
     return h;
   }
 
+  /* Prepared-by / checked-by signature block for the two-person bag check. */
+  function drawCheckBlock(doc, data, y) {
+    var h = 30;
+    var halfW = CONTENT_W / 2;
+
+    doc.setFillColor(SOFT_BG[0], SOFT_BG[1], SOFT_BG[2]);
+    doc.rect(PAGE.ml, y, CONTENT_W, 7, "F");
+    doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+    doc.setLineWidth(0.2);
+    doc.rect(PAGE.ml, y, CONTENT_W, h, "S");
+    doc.line(PAGE.ml, y + 7, PAGE.w - PAGE.mr, y + 7);
+    doc.line(PAGE.ml + halfW, y + 7, PAGE.ml + halfW, y + h);
+
+    setFont(doc, 8.5, "bold");
+    doc.setTextColor(60, 72, 86);
+    doc.text("BAG PREPARATION \u2014 TWO PERSON CHECK", PAGE.ml + 3, y + 4.9);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+
+    [
+      ["PREPARED BY", txt(data.preppedBy), txt(data.preppedDate), PAGE.ml],
+      ["CHECKED BY", txt(data.checkedBy), "", PAGE.ml + halfW]
+    ].forEach(function (col) {
+      var cx = col[3];
+      setFont(doc, 7.5, "bold");
+      doc.setTextColor(95, 105, 118);
+      doc.text(col[0], cx + 3, y + 12);
+      doc.setTextColor(INK[0], INK[1], INK[2]);
+
+      [["Name", col[1], 17.5], ["Signature", "", 23], ["Date", col[2], 28.5]].forEach(function (row) {
+        setFont(doc, 8, "normal");
+        doc.setTextColor(95, 105, 118);
+        doc.text(row[0], cx + 3, y + row[2]);
+        doc.setTextColor(INK[0], INK[1], INK[2]);
+        doc.setDrawColor(160, 168, 178);
+        doc.setLineWidth(0.15);
+        doc.line(cx + 20, y + row[2] + 1, cx + halfW - 3, y + row[2] + 1);
+        if (row[1]) {
+          setFont(doc, 9, "bold");
+          doc.text(wrap(doc, row[1], halfW - 26)[0], cx + 21, y + row[2]);
+        }
+      });
+    });
+    return h;
+  }
+
   function footer(doc, data, pageNo) {
     setFont(doc, 8, "normal");
     doc.setTextColor(110, 118, 128);
@@ -121,10 +191,14 @@
     doc.setTextColor(INK[0], INK[1], INK[2]);
     y += 20;
 
-    // Detail strip
+    // Detail strip. The bag as a whole expires with its earliest item.
+    var first = global.Expiry ? global.Expiry.earliest(data.medications) : null;
     var details = [
       ["Prepped by", txt(data.preppedBy)],
       ["Prepped date", txt(data.preppedDate)],
+      ["Bag expires",
+        first ? global.Expiry.format(first.parsed) : "—",
+        first ? expiryColour(first.med) : null],
       ["Seal number", txt(data.sealNumber) || "—"],
       ["Contact", txt(data.companyPhone)]
     ];
@@ -137,12 +211,14 @@
     details.forEach(function (d, i) {
       var cx = PAGE.ml + dw * i;
       if (i > 0) doc.line(cx, y, cx, y + 12);
-      setFont(doc, 7.5, "normal");
+      setFont(doc, 7, "normal");
       doc.setTextColor(95, 105, 118);
       doc.text(d[0].toUpperCase(), cx + 2.5, y + 4.5);
-      doc.setTextColor(INK[0], INK[1], INK[2]);
-      setFont(doc, 9.5, "bold");
+      var vc = d[2] || INK;
+      doc.setTextColor(vc[0], vc[1], vc[2]);
+      setFont(doc, 9, "bold");
       doc.text(wrap(doc, d[1] || "—", dw - 5)[0], cx + 2.5, y + 9.5);
+      doc.setTextColor(INK[0], INK[1], INK[2]);
     });
     y += 12 + 6;
 
@@ -175,9 +251,20 @@
         { text: m.presentation },
         { text: sched, bold: true, fill: colour, colour: [255, 255, 255], align: "center" },
         { text: m.batch || "—" },
-        { text: m.expiry }
+        { text: expiryText(m), colour: expiryColour(m), bold: !!expiryColour(m) }
       ], { minH: 8 });
     });
+
+    // Two-person check block
+    if (y + 30 > PAGE.h - PAGE.mb) {
+      footer(doc, data, state.page);
+      doc.addPage();
+      state.page += 1;
+      y = PAGE.mt;
+    } else {
+      y += 6;
+    }
+    y += drawCheckBlock(doc, data, y);
 
     // "If found" notice
     var noticeLines = [];
@@ -240,83 +327,173 @@
     return counts;
   }
 
-  function drawLog(doc, data, med, state) {
-    var total = Math.max(1, parseInt(med.doses, 10) || 1);
-    var widths = [16, 40, 40, 90]; // NO | DATE USED | PRF NO | SIGNED  = 186
-    var header = ["NO", "DATE USED", "PRF NO", "SIGNED"];
+  /* Grey title bar naming the medication. */
+  function logTitle(doc, med, y, colour) {
+    var c = colour || HEAD_BG;
+    doc.setFillColor(c[0], c[1], c[2]);
+    doc.rect(PAGE.ml, y, CONTENT_W, 11, "F");
+    doc.setTextColor(255, 255, 255);
+    setFont(doc, 13, "bold");
+    doc.text(txt(med.name), PAGE.w / 2, y + 7.5, { align: "center" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    return y + 11;
+  }
 
+  /* PRESENTATION / DOSE / BATCH NO / EXPIRY strip. */
+  function logDetailBar(doc, med, y) {
+    var pairs = [
+      ["PRESENTATION", med.presentation],
+      ["DOSE", med.dose],
+      ["BATCH NO", med.batch || "\u2014"],
+      ["EXPIRY", expiryText(med)]
+    ];
+    var barH = 8;
+    var cx = PAGE.ml;
+    var cellW = CONTENT_W / pairs.length;
+    pairs.forEach(function (p, i) {
+      setFont(doc, 7.5, "bold");
+      var labelW = doc.getTextWidth(p[0]) + 5;
+      doc.setFillColor(BAR_BG[0], BAR_BG[1], BAR_BG[2]);
+      doc.rect(cx, y, labelW, barH, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.text(p[0], cx + 2.5, y + 5.4);
+
+      doc.setFillColor(213, 216, 220);
+      doc.rect(cx + labelW, y, cellW - labelW, barH, "F");
+      var vc = (i === 3 && expiryColour(med)) || INK;
+      doc.setTextColor(vc[0], vc[1], vc[2]);
+      setFont(doc, 8.5, "bold");
+      doc.text(wrap(doc, p[1], cellW - labelW - 4)[0], cx + labelW + 2.5, y + 5.4);
+      cx += cellW;
+    });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    return y + barH;
+  }
+
+  /*
+   * Draw a paginated log for one medication.
+   * spec: { widths, header, rowCount, row(n), firstHead(y)->y, contHead(y)->y,
+   *         contHeadH, rowH }
+   * The first page's header is drawn before capacity is measured, so a header
+   * whose height depends on wrapped text cannot push rows off the page.
+   */
+  function drawPaginatedLog(doc, data, med, state, spec) {
     function tableHead(atY) {
-      return drawRow(doc, PAGE.ml, atY, widths, header.map(function (h, i) {
-        return { text: h, bold: true, fill: SOFT_BG, size: 9, align: i === 0 ? "center" : "left" };
+      return drawRow(doc, PAGE.ml, atY, spec.widths, spec.header.map(function (h, i) {
+        return {
+          text: h, bold: true, fill: SOFT_BG, size: spec.headSize || 9,
+          align: spec.headAlign && spec.headAlign[i] ? spec.headAlign[i] : "left"
+        };
       }), { minH: 8 });
     }
 
-    /* Header block for the first page: title bar + presentation/dose bar. */
-    function firstPageHead() {
-      var y = PAGE.mt;
-      doc.setFillColor(HEAD_BG[0], HEAD_BG[1], HEAD_BG[2]);
-      doc.rect(PAGE.ml, y, CONTENT_W, 11, "F");
-      doc.setTextColor(255, 255, 255);
-      setFont(doc, 13, "bold");
-      doc.text(txt(med.name), PAGE.w / 2, y + 7.5, { align: "center" });
-      y += 11;
+    var rowH = spec.rowH || LOG_ROW_H;
+    var bottom = PAGE.h - PAGE.mb;
 
-      var pairs = [
-        ["PRESENTATION", med.presentation],
-        ["DOSE", med.dose],
-        ["BATCH NO", med.batch || "\u2014"],
-        ["EXPIRY", med.expiry]
-      ];
-      var barH = 8;
-      var cx = PAGE.ml;
-      var cellW = CONTENT_W / pairs.length;
-      pairs.forEach(function (p) {
-        setFont(doc, 7.5, "bold");
-        var labelW = doc.getTextWidth(p[0]) + 5;
-        doc.setFillColor(BAR_BG[0], BAR_BG[1], BAR_BG[2]);
-        doc.rect(cx, y, labelW, barH, "F");
-        doc.setTextColor(255, 255, 255);
-        doc.text(p[0], cx + 2.5, y + 5.4);
+    doc.addPage();
+    state.page += 1;
+    var y = spec.firstHead(PAGE.mt);
+    y += tableHead(y);
+    if (spec.afterHead) y += spec.afterHead(y);
 
-        doc.setFillColor(213, 216, 220);
-        doc.rect(cx + labelW, y, cellW - labelW, barH, "F");
-        doc.setTextColor(INK[0], INK[1], INK[2]);
-        setFont(doc, 8.5, "bold");
-        doc.text(wrap(doc, p[1], cellW - labelW - 4)[0], cx + labelW + 2.5, y + 5.4);
-        cx += cellW;
-      });
-      doc.setTextColor(INK[0], INK[1], INK[2]);
-      return y + barH + 7;
-    }
-
-    function contPageHead() {
-      var y = PAGE.mt;
-      setFont(doc, 10, "bold");
-      doc.text(txt(med.name) + " (continued)", PAGE.ml, y + 4);
-      return y + 8;
-    }
-
-    // Capacities, measured against the real header heights.
-    var yFirst = PAGE.mt + 11 + 8 + 7 + 8;   // title bar + detail bar + gap + table head
-    var yCont = PAGE.mt + 8 + 8;             // continued caption + table head
-    var capFirst = Math.max(1, Math.floor((PAGE.h - PAGE.mb - yFirst) / LOG_ROW_H));
-    var capRest = Math.max(1, Math.floor((PAGE.h - PAGE.mb - yCont) / LOG_ROW_H));
-    var counts = splitRows(total, capFirst, capRest);
+    var capFirst = Math.max(1, Math.floor((bottom - y) / rowH));
+    var capRest = Math.max(1, Math.floor((bottom - (PAGE.mt + spec.contHeadH + 8)) / rowH));
+    var counts = splitRows(spec.rowCount, capFirst, capRest);
 
     var n = 1;
     counts.forEach(function (count, pageIdx) {
-      doc.addPage();
-      state.page += 1;
-      var y = pageIdx === 0 ? firstPageHead() : contPageHead();
-      y += tableHead(y);
+      if (pageIdx > 0) {
+        doc.addPage();
+        state.page += 1;
+        y = spec.contHead(PAGE.mt);
+        y += tableHead(y);
+      }
       for (var i = 0; i < count; i++) {
-        y += drawRow(doc, PAGE.ml, y, widths, [
-          { text: String(n), bold: true, align: "center" },
-          { text: "" }, { text: "" }, { text: "" }
-        ], { minH: LOG_ROW_H });
+        y += drawRow(doc, PAGE.ml, y, spec.widths, spec.row(n), { minH: rowH });
         n += 1;
       }
       footer(doc, data, state.page);
+    });
+  }
+
+  /* ---- standard usage log ---- */
+  function drawLog(doc, data, med, state) {
+    drawPaginatedLog(doc, data, med, state, {
+      widths: [16, 40, 40, 90], // NO | DATE USED | PRF NO | SIGNED = 186
+      header: ["NO", "DATE USED", "PRF NO", "SIGNED"],
+      headAlign: ["center", "left", "left", "left"],
+      rowCount: Math.max(1, parseInt(med.doses, 10) || 1),
+      row: function (n) {
+        return [
+          { text: String(n), bold: true, align: "center" },
+          { text: "" }, { text: "" }, { text: "" }
+        ];
+      },
+      contHeadH: 8,
+      firstHead: function (y) { return logDetailBar(doc, med, logTitle(doc, med, y)) + 7; },
+      contHead: function (y) {
+        setFont(doc, 10, "bold");
+        doc.text(txt(med.name) + " (continued)", PAGE.ml, y + 4);
+        return y + 8;
+      }
+    });
+  }
+
+  /* ---- controlled drug register ---- */
+  function drawCdLog(doc, data, med, state) {
+    var doses = Math.max(1, parseInt(med.doses, 10) || 1);
+    // Spare rows: a discard or part-dose entry consumes a line of its own.
+    var rows = doses + Math.max(2, Math.ceil(doses / 4));
+    var widths = [20, 13, 22, 18, 18, 18, 40, 37]; // = 186
+    var note = "Every entry must be signed by the administering clinician and a witness. " +
+      "Record any discarded volume on its own line and carry the balance forward.";
+
+    function openingBalance(y) {
+      // Balance brought forward, drawn across merged leading columns.
+      return drawRow(doc, PAGE.ml, y, [55, 18, 18, 18, 40, 37], [
+        { text: "BALANCE BROUGHT FORWARD (bag prepped " + (txt(data.preppedDate) || "\u2014") + ")",
+          bold: true, fill: [235, 238, 241], size: 8 },
+        { text: "\u2014", align: "center", fill: [235, 238, 241] },
+        { text: "\u2014", align: "center", fill: [235, 238, 241] },
+        { text: String(doses), bold: true, align: "center", fill: [235, 238, 241] },
+        { text: txt(data.preppedBy), size: 8, fill: [235, 238, 241] },
+        { text: txt(data.checkedBy), size: 8, fill: [235, 238, 241] }
+      ], { minH: 8 });
+    }
+
+    drawPaginatedLog(doc, data, med, state, {
+      widths: widths,
+      header: ["DATE", "TIME", "PRF NO", "GIVEN", "DISCARD", "BALANCE",
+               "ADMINISTERED BY", "WITNESSED BY"],
+      headSize: 7.5,
+      headAlign: ["left", "left", "left", "center", "center", "center", "left", "left"],
+      rowCount: rows,
+      row: function () {
+        return [
+          { text: "" }, { text: "" }, { text: "" }, { text: "" },
+          { text: "" }, { text: "" }, { text: "" }, { text: "" }
+        ];
+      },
+      contHeadH: 8,
+      firstHead: function (y) {
+        y = logTitle(doc, med, y, CD_BG);
+        y = logDetailBar(doc, med, y);
+        y += 5;
+        setFont(doc, 7.5, "normal");
+        doc.setTextColor(120, 40, 40);
+        var noteLines = wrap(doc, note, CONTENT_W);
+        doc.text(noteLines, PAGE.ml, y);
+        doc.setTextColor(INK[0], INK[1], INK[2]);
+        return y + linesHeight(noteLines, 7.5) + 3;
+      },
+      afterHead: openingBalance,
+      contHead: function (y) {
+        setFont(doc, 10, "bold");
+        doc.setTextColor(CD_BG[0], CD_BG[1], CD_BG[2]);
+        doc.text("CD register \u2014 " + txt(med.name) + " (continued)", PAGE.ml, y + 4);
+        doc.setTextColor(INK[0], INK[1], INK[2]);
+        return y + 8;
+      }
     });
   }
 
@@ -336,7 +513,10 @@
 
     var state = { page: 1 };
     drawLabel(doc, data, state);
-    data.medications.forEach(function (m) { drawLog(doc, data, m, state); });
+    data.medications.forEach(function (m) {
+      if (isCd(m)) drawCdLog(doc, data, m, state);
+      else drawLog(doc, data, m, state);
+    });
     return doc;
   }
 

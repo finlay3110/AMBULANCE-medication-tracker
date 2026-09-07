@@ -69,6 +69,11 @@
           <span>Seal number</span>
           <input type="text" id="sealNumber" placeholder="Optional">
         </label>
+        <label class="field span2">
+          <span>Checked by</span>
+          <input type="text" id="checkedBy" placeholder="Second person for the two-person check (optional)">
+          <small class="echo">The label page carries a prepared-by / checked-by signature block. Leave blank to sign it by hand.</small>
+        </label>
       </div>
     </div>
 
@@ -107,7 +112,8 @@
           </label>
           <label class="field">
             <span>Expiry <b>*</b></span>
-            <input type="text" id="mExpiry" placeholder="e.g. 07/25 or 2025-07">
+            <input type="text" id="mExpiry" placeholder="e.g. 07/25, 10/2027 or 18/10/2025" autocomplete="off">
+            <small class="echo" id="mExpiryEcho">Month or full date &mdash; 07/25, 10/2027, 18/10/2025, Oct 2025</small>
           </label>
           <label class="field">
             <span>Number of doses <b>*</b></span>
@@ -122,6 +128,12 @@
               <option value="S17">S17 — Exemption (e.g. naloxone)</option>
               <option value="CD">CD — Controlled drug</option>
             </select>
+          </label>
+          <label class="field check span2">
+            <input type="checkbox" id="mCdLog">
+            <span>Use controlled drug register layout for this medication
+              <small>Running balance, amount discarded, and a witness signature column. Turned on automatically for schedule CD.</small>
+            </span>
           </label>
         </div>
         <p class="error" id="medError" hidden></p>
@@ -150,6 +162,7 @@
       <h2>Generate document</h2>
       <p class="hint">A4 PDF: page 1 is the bag label, followed by one usage log per medication.</p>
       <div id="summary" class="summary"></div>
+      <p class="notice" id="expiryWarning" hidden></p>
       <p class="error" id="genError" hidden></p>
       <div class="actions">
         <button type="button" class="btn primary big" id="generateBtn">Download PDF</button>
@@ -174,6 +187,7 @@
 <footer class="foot">Runs entirely in your browser · PDF by jsPDF</footer>
 
 <script src="vendor/jspdf.umd.min.js"></script>
+<script src="expiry.js"></script>
 <script src="pdf.js"></script>
 <script src="app.js"></script>
 </body>
