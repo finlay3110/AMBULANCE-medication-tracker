@@ -24,13 +24,37 @@
 
 <nav class="tabs" role="tablist">
   <button class="tab active" role="tab" data-tab="setup" aria-selected="true">1. Setup</button>
-  <button class="tab" role="tab" data-tab="meds" aria-selected="false">2. Medications <span class="pill" id="medCount">0</span></button>
+  <button class="tab" role="tab" data-tab="meds" aria-selected="false"><span id="tabMedsLabel">2. Medications</span> <span class="pill" id="medCount">0</span></button>
   <button class="tab" role="tab" data-tab="generate" aria-selected="false">3. Generate</button>
 </nav>
 
 <main>
   <!-- ============ SETUP ============ -->
   <section class="panel active" id="panel-setup" role="tabpanel">
+    <div class="card">
+      <h2>Document type</h2>
+      <p class="hint">Controlled drugs are held in the CD safe, not in a drug bag, so they are
+        recorded on a completely separate document. Pick one &mdash; each keeps its own details
+        and its own list, so you can prepare both without them mixing.</p>
+      <div class="modes">
+        <label class="mode">
+          <input type="radio" name="docMode" value="bag" checked>
+          <span>
+            <b>Drug bag</b>
+            <small>Sealed bag or pouch. Produces the bag label plus a usage log per medication.</small>
+          </span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="docMode" value="cd">
+          <span>
+            <b>Controlled drugs (CD safe)</b>
+            <small>Stock held in the safe. Produces a register with running balances, plus a
+              sign-out sheet for drugs taken into a personal pouch.</small>
+          </span>
+        </label>
+      </div>
+    </div>
+
     <div class="card">
       <h2>Company details</h2>
       <p class="hint">These appear on the bag label and in the "if found" notice.</p>
@@ -51,28 +75,32 @@
     </div>
 
     <div class="card">
-      <h2>Bag details</h2>
+      <h2 id="detailsTitle">Bag details</h2>
       <div class="grid">
-        <label class="field">
+        <label class="field" id="f-bagNumber">
           <span>Drug bag number <b>*</b></span>
           <input type="text" id="bagNumber" placeholder="e.g. DB-014">
         </label>
-        <label class="field">
+        <label class="field" id="f-preppedBy">
           <span>Prepped by <b>*</b></span>
           <input type="text" id="preppedBy" placeholder="Name of person who prepped the bag">
         </label>
-        <label class="field">
+        <label class="field" id="f-preppedDate">
           <span>Prepped date</span>
           <input type="date" id="preppedDate">
         </label>
-        <label class="field">
+        <label class="field" id="f-sealNumber">
           <span>Seal number</span>
           <input type="text" id="sealNumber" placeholder="Optional">
         </label>
-        <label class="field span2">
+        <label class="field span2" id="f-safeLocation" hidden>
+          <span>Safe location</span>
+          <input type="text" id="safeLocation" placeholder="e.g. Secure room, Station 4">
+        </label>
+        <label class="field span2" id="f-checkedBy">
           <span>Checked by</span>
           <input type="text" id="checkedBy" placeholder="Second person for the two-person check (optional)">
-          <small class="echo">The label page carries a prepared-by / checked-by signature block. Leave blank to sign it by hand.</small>
+          <small class="echo" id="checkedByHint">The label page carries a prepared-by / checked-by signature block. Leave blank to sign it by hand.</small>
         </label>
       </div>
     </div>
@@ -115,25 +143,18 @@
             <input type="text" id="mExpiry" placeholder="e.g. 07/25, 10/2027 or 18/10/2025" autocomplete="off">
             <small class="echo" id="mExpiryEcho">Month or full date &mdash; 07/25, 10/2027, 18/10/2025, Oct 2025</small>
           </label>
-          <label class="field">
+          <label class="field" id="f-mDoses">
             <span>Number of doses <b>*</b></span>
             <input type="number" id="mDoses" min="1" max="200" step="1" placeholder="e.g. 12">
           </label>
-          <label class="field">
+          <label class="field" id="f-mSchedule">
             <span>Schedule</span>
             <select id="mSchedule">
               <option value="GSL">GSL — General sales list</option>
               <option value="P">P — Pharmacy only</option>
               <option value="POM">POM — Prescription only</option>
               <option value="S17">S17 — Exemption (e.g. naloxone)</option>
-              <option value="CD">CD — Controlled drug</option>
             </select>
-          </label>
-          <label class="field check span2">
-            <input type="checkbox" id="mCdLog">
-            <span>Use controlled drug register layout for this medication
-              <small>Running balance, amount discarded, and a witness signature column. Turned on automatically for schedule CD.</small>
-            </span>
           </label>
         </div>
         <p class="error" id="medError" hidden></p>
@@ -145,7 +166,7 @@
     </div>
 
     <div class="card">
-      <h2>Bag contents <span class="pill" id="medCount2">0</span></h2>
+      <h2><span id="contentsTitle">Bag contents</span> <span class="pill" id="medCount2">0</span></h2>
       <div id="medList" class="med-list"></div>
       <p class="empty" id="medEmpty">No medications added yet. Add the first one above.</p>
     </div>
@@ -160,7 +181,7 @@
   <section class="panel" id="panel-generate" role="tabpanel">
     <div class="card">
       <h2>Generate document</h2>
-      <p class="hint">A4 PDF: page 1 is the bag label, followed by one usage log per medication.</p>
+      <p class="hint" id="generateHint">A4 PDF: page 1 is the bag label, followed by one usage log per medication.</p>
       <div id="summary" class="summary"></div>
       <p class="notice" id="expiryWarning" hidden></p>
       <p class="error" id="genError" hidden></p>
@@ -170,11 +191,11 @@
       </div>
     </div>
     <div class="card">
-      <h2>Save / load bag</h2>
-      <p class="hint">Everything stays on this device — nothing is uploaded. Export a bag to reuse it next time.</p>
+      <h2 id="saveTitle">Save / load bag</h2>
+      <p class="hint" id="saveHint">Everything stays on this device — nothing is uploaded. Export a bag to reuse it next time.</p>
       <div class="actions">
-        <button type="button" class="btn ghost" id="exportBtn">Export bag (.json)</button>
-        <button type="button" class="btn ghost" id="importBtn">Import bag (.json)</button>
+        <button type="button" class="btn ghost" id="exportBtn">Export (.json)</button>
+        <button type="button" class="btn ghost" id="importBtn">Import (.json)</button>
         <input type="file" id="importFile" accept="application/json,.json" hidden>
       </div>
     </div>

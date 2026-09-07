@@ -10,6 +10,8 @@
   --radius: 10px;
 }
 * { box-sizing: border-box; }
+/* Beats the display rules below, which would otherwise override [hidden]. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--bg);
@@ -183,3 +185,22 @@ textarea { resize: vertical; }
 .sum-item.warn dd { color: #8a5d00; }
 
 code { background: #eef2f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+/* ---------- document type selector ---------- */
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mode {
+  display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 9px; padding: 13px 14px; background: #fbfcfd;
+}
+.mode:hover { background: #f2f5f8; }
+.mode input { width: auto; flex: none; margin: 2px 0 0; }
+.mode b { display: block; font-size: 14px; }
+.mode small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+.mode:has(input:checked) { border-color: var(--accent); background: #f0f7f2; box-shadow: 0 0 0 1px var(--accent); }
+
+/* Controlled drug documents read in the CD colour throughout. */
+body.cd-mode { --accent: #8b1a1a; --accent-dark: #6f1414; }
+body.cd-mode .cross { background: #8b1a1a; }
+body.cd-mode .mode:has(input:checked) { background: #fbf2f2; }
+
+@media (max-width: 700px) { .modes { grid-template-columns: 1fr; } }

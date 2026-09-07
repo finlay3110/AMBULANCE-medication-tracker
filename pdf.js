@@ -39,9 +39,8 @@
     return null;
   }
 
-  /* Does this medication get the controlled-drug register layout? */
-  function isCd(med) {
-    return med.cdLog === true || (med.cdLog === undefined && txt(med.schedule) === "CD");
+  function isCdDoc(data) {
+    return data.mode === "cd";
   }
 
   function txt(v) {
@@ -115,8 +114,39 @@
     return h;
   }
 
+  /* Labelled strip of key details, one cell per entry: [label, value, colour?]. */
+  function detailStrip(doc, details, y) {
+    var h = 12;
+    var dw = CONTENT_W / details.length;
+    doc.setFillColor(SOFT_BG[0], SOFT_BG[1], SOFT_BG[2]);
+    doc.rect(PAGE.ml, y, CONTENT_W, h, "F");
+    doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+    doc.setLineWidth(0.2);
+    doc.rect(PAGE.ml, y, CONTENT_W, h, "S");
+    details.forEach(function (d, i) {
+      var cx = PAGE.ml + dw * i;
+      if (i > 0) doc.line(cx, y, cx, y + h);
+      setFont(doc, 7, "normal");
+      doc.setTextColor(95, 105, 118);
+      doc.text(d[0].toUpperCase(), cx + 2.5, y + 4.5);
+      var vc = d[2] || INK;
+      doc.setTextColor(vc[0], vc[1], vc[2]);
+      setFont(doc, 9, "bold");
+      var lines = wrap(doc, d[1] || "\u2014", dw - 5);
+      if (lines.length === 1) {
+        doc.text(lines[0], cx + 2.5, y + 9.5);
+      } else {
+        // Two lines at a smaller size beats silently clipping the value.
+        setFont(doc, 7.5, "bold");
+        doc.text(wrap(doc, d[1], dw - 5).slice(0, 2), cx + 2.5, y + 8);
+      }
+      doc.setTextColor(INK[0], INK[1], INK[2]);
+    });
+    return y + h;
+  }
+
   /* Prepared-by / checked-by signature block for the two-person bag check. */
-  function drawCheckBlock(doc, data, y) {
+  function drawCheckBlock(doc, data, y, title, leftLabel, rightLabel) {
     var h = 30;
     var halfW = CONTENT_W / 2;
 
@@ -130,12 +160,12 @@
 
     setFont(doc, 8.5, "bold");
     doc.setTextColor(60, 72, 86);
-    doc.text("BAG PREPARATION \u2014 TWO PERSON CHECK", PAGE.ml + 3, y + 4.9);
+    doc.text(title || "BAG PREPARATION \u2014 TWO PERSON CHECK", PAGE.ml + 3, y + 4.9);
     doc.setTextColor(INK[0], INK[1], INK[2]);
 
     [
-      ["PREPARED BY", txt(data.preppedBy), txt(data.preppedDate), PAGE.ml],
-      ["CHECKED BY", txt(data.checkedBy), "", PAGE.ml + halfW]
+      [leftLabel || "PREPARED BY", txt(data.preppedBy), txt(data.preppedDate), PAGE.ml],
+      [rightLabel || "CHECKED BY", txt(data.checkedBy), "", PAGE.ml + halfW]
     ].forEach(function (col) {
       var cx = col[3];
       setFont(doc, 7.5, "bold");
@@ -163,7 +193,8 @@
   function footer(doc, data, pageNo) {
     setFont(doc, 8, "normal");
     doc.setTextColor(110, 118, 128);
-    var left = "Bag " + (txt(data.bagNumber) || "—") + "  ·  " + txt(data.companyName);
+    var left = (isCdDoc(data) ? "CD safe " : "Bag ") +
+      (txt(data.bagNumber) || "—") + "  ·  " + txt(data.companyName);
     doc.text(left, PAGE.ml, PAGE.h - 7);
     doc.text("Page " + pageNo, PAGE.w - PAGE.mr, PAGE.h - 7, { align: "right" });
     doc.setTextColor(INK[0], INK[1], INK[2]);
@@ -202,25 +233,7 @@
       ["Seal number", txt(data.sealNumber) || "—"],
       ["Contact", txt(data.companyPhone)]
     ];
-    var dw = CONTENT_W / details.length;
-    doc.setFillColor(SOFT_BG[0], SOFT_BG[1], SOFT_BG[2]);
-    doc.rect(PAGE.ml, y, CONTENT_W, 12, "F");
-    doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
-    doc.setLineWidth(0.2);
-    doc.rect(PAGE.ml, y, CONTENT_W, 12, "S");
-    details.forEach(function (d, i) {
-      var cx = PAGE.ml + dw * i;
-      if (i > 0) doc.line(cx, y, cx, y + 12);
-      setFont(doc, 7, "normal");
-      doc.setTextColor(95, 105, 118);
-      doc.text(d[0].toUpperCase(), cx + 2.5, y + 4.5);
-      var vc = d[2] || INK;
-      doc.setTextColor(vc[0], vc[1], vc[2]);
-      setFont(doc, 9, "bold");
-      doc.text(wrap(doc, d[1] || "—", dw - 5)[0], cx + 2.5, y + 9.5);
-      doc.setTextColor(INK[0], INK[1], INK[2]);
-    });
-    y += 12 + 6;
+    y = detailStrip(doc, details, y) + 6;
 
     // Contents table
     var widths = [50, 26, 30, 18, 30, 32]; // = 186 = CONTENT_W
@@ -451,7 +464,7 @@
     function openingBalance(y) {
       // Balance brought forward, drawn across merged leading columns.
       return drawRow(doc, PAGE.ml, y, [55, 18, 18, 18, 40, 37], [
-        { text: "BALANCE BROUGHT FORWARD (bag prepped " + (txt(data.preppedDate) || "\u2014") + ")",
+        { text: "BALANCE BROUGHT FORWARD (stock entered " + (txt(data.preppedDate) || "\u2014") + ")",
           bold: true, fill: [235, 238, 241], size: 8 },
         { text: "\u2014", align: "center", fill: [235, 238, 241] },
         { text: "\u2014", align: "center", fill: [235, 238, 241] },
@@ -497,6 +510,165 @@
     });
   }
 
+
+  /* ------------------------------------------------------------------ */
+  /* Controlled drugs: register front sheet                              */
+  /* ------------------------------------------------------------------ */
+  function drawCdCover(doc, data, state) {
+    var y = PAGE.mt;
+
+    doc.setFillColor(CD_BG[0], CD_BG[1], CD_BG[2]);
+    doc.rect(PAGE.ml, y, CONTENT_W, 20, "F");
+    doc.setTextColor(255, 255, 255);
+    setFont(doc, 15, "bold");
+    doc.text("CONTROLLED DRUGS REGISTER", PAGE.ml + 4, y + 8.5);
+    setFont(doc, 10, "normal");
+    doc.text(txt(data.companyName), PAGE.ml + 4, y + 15);
+    setFont(doc, 9, "normal");
+    doc.text("CD SAFE", PAGE.w - PAGE.mr - 4, y + 7, { align: "right" });
+    setFont(doc, 16, "bold");
+    doc.text(txt(data.bagNumber) || "\u2014", PAGE.w - PAGE.mr - 4, y + 15.5, { align: "right" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    y += 20;
+
+    var first = global.Expiry ? global.Expiry.earliest(data.medications) : null;
+    var details = [
+      ["Accountable officer", txt(data.preppedBy)],
+      ["Register opened", txt(data.preppedDate)],
+      ["Earliest expiry",
+        first ? global.Expiry.format(first.parsed) : "\u2014",
+        first ? expiryColour(first.med) : null],
+      ["Location", txt(data.safeLocation) || "\u2014"],
+      ["Contact", txt(data.companyPhone)]
+    ];
+    y = detailStrip(doc, details, y) + 6;
+
+    // Stock held
+    var widths = [56, 30, 30, 22, 22, 26]; // = 186
+    y += drawRow(doc, PAGE.ml, y, widths, [
+      "Controlled drug", "Presentation", "Strength", "Quantity", "Batch", "Expiry"
+    ].map(function (h) {
+      return { text: h, bold: true, fill: HEAD_BG, colour: [255, 255, 255], size: 9 };
+    }), { minH: 8 });
+
+    data.medications.forEach(function (m) {
+      if (y > PAGE.h - PAGE.mb - 14) {
+        footer(doc, data, state.page);
+        doc.addPage();
+        state.page += 1;
+        y = PAGE.mt;
+      }
+      y += drawRow(doc, PAGE.ml, y, widths, [
+        { text: m.name },
+        { text: m.presentation },
+        { text: m.dose },
+        { text: String(m.doses), bold: true, align: "center" },
+        { text: m.batch || "\u2014" },
+        { text: expiryText(m), colour: expiryColour(m), bold: !!expiryColour(m) }
+      ], { minH: 8 });
+    });
+
+    y += 6;
+    if (y + 30 > PAGE.h - PAGE.mb) {
+      footer(doc, data, state.page);
+      doc.addPage();
+      state.page += 1;
+      y = PAGE.mt;
+    }
+    y += drawCheckBlock(doc, data, y, "STOCK CHECK \u2014 TWO PERSON",
+                        "CHECKED BY", "WITNESSED BY");
+
+    // Storage / handling notice
+    setFont(doc, 9, "normal");
+    var lines = wrap(doc, "Controlled drugs are held in the CD safe and are not carried in the " +
+      "drug bag. Stock is signed out of the safe into a personal drug pouch on the sign-out " +
+      "sheet at the back of this register, and any unused stock is signed back in. Retain this " +
+      "register in line with your organisation's controlled drugs policy and current legislation.",
+      CONTENT_W - 8);
+    var h = linesHeight(lines, 9) + 12;
+    y += 6;
+    if (y + h > PAGE.h - PAGE.mb) {
+      footer(doc, data, state.page);
+      doc.addPage();
+      state.page += 1;
+      y = PAGE.mt;
+    }
+    doc.setFillColor(250, 238, 238);
+    doc.setDrawColor(CD_BG[0], CD_BG[1], CD_BG[2]);
+    doc.setLineWidth(0.5);
+    doc.rect(PAGE.ml, y, CONTENT_W, h, "FD");
+    setFont(doc, 9, "bold");
+    doc.setTextColor(CD_BG[0], CD_BG[1], CD_BG[2]);
+    doc.text("STORAGE AND HANDLING", PAGE.ml + 4, y + 6);
+    setFont(doc, 9, "normal");
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text(lines, PAGE.ml + 4, y + 11);
+
+    footer(doc, data, state.page);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Controlled drugs: safe -> pouch sign-out sheet (landscape)          */
+  /* ------------------------------------------------------------------ */
+  function drawPouchSheet(doc, data, state) {
+    doc.addPage("a4", "landscape");
+    state.page += 1;
+
+    var W = PAGE.h;              // 297 landscape width
+    var H = PAGE.w;              // 210 landscape height
+    var contentW = W - PAGE.ml - PAGE.mr;
+    var y = PAGE.mt;
+
+    doc.setFillColor(CD_BG[0], CD_BG[1], CD_BG[2]);
+    doc.rect(PAGE.ml, y, contentW, 13, "F");
+    doc.setTextColor(255, 255, 255);
+    setFont(doc, 13, "bold");
+    doc.text("CD SAFE \u2014 SIGN OUT / SIGN IN", PAGE.ml + 4, y + 6);
+    setFont(doc, 9, "normal");
+    doc.text("Safe " + (txt(data.bagNumber) || "\u2014") + "  \u00b7  " + txt(data.companyName) +
+      (txt(data.safeLocation) ? "  \u00b7  " + txt(data.safeLocation) : ""), PAGE.ml + 4, y + 11);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    y += 13 + 4;
+
+    setFont(doc, 7.5, "normal");
+    doc.setTextColor(120, 40, 40);
+    doc.text("Stock removed from the safe into a personal drug pouch must be signed out by two " +
+      "people and signed back in on return. Anything administered is also entered on that drug's " +
+      "register page.", PAGE.ml, y);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    y += 6;
+
+    // DATE | TIME OUT | DRUG & STRENGTH | QTY | ISSUED BY | CARRIED BY | TIME IN | QTY IN | BACK IN
+    var widths = [22, 18, 50, 16, 44, 50, 18, 18, 37]; // = 273
+    var header = ["DATE", "TIME OUT", "DRUG AND STRENGTH", "QTY OUT", "ISSUED BY (sign)",
+                  "CARRIED BY \u2014 name and reg. no.", "TIME IN", "QTY IN",
+                  "SIGNED BACK IN"];
+
+    function head(atY) {
+      return drawRow(doc, PAGE.ml, atY, widths, header.map(function (h, i) {
+        return {
+          text: h, bold: true, fill: SOFT_BG, size: 7,
+          align: (i === 3 || i === 6 || i === 7) ? "center" : "left"
+        };
+      }), { minH: 9 });
+    }
+
+    y += head(y);
+    var rowH = 11;
+    var blank = widths.map(function () { return { text: "" }; });
+    while (y + rowH <= H - PAGE.mb) {
+      y += drawRow(doc, PAGE.ml, y, widths, blank, { minH: rowH });
+    }
+
+    // Footer, positioned for the landscape page.
+    setFont(doc, 8, "normal");
+    doc.setTextColor(110, 118, 128);
+    doc.text("CD safe " + (txt(data.bagNumber) || "\u2014") + "  \u00b7  " + txt(data.companyName),
+      PAGE.ml, H - 7);
+    doc.text("Page " + state.page, W - PAGE.mr, H - 7, { align: "right" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+  }
+
   /* ------------------------------------------------------------------ */
 
   function build(data) {
@@ -505,24 +677,32 @@
 
     var doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
     doc.setProperties({
-      title: "Drug bag " + txt(data.bagNumber) + " — medication log",
-      subject: "Medication tracking document",
+      title: isCdDoc(data)
+        ? "Controlled drugs register — safe " + txt(data.bagNumber)
+        : "Drug bag " + txt(data.bagNumber) + " — medication log",
+      subject: isCdDoc(data) ? "Controlled drugs register" : "Medication tracking document",
       author: txt(data.companyName),
       creator: "Drug Bag Tracker"
     });
 
     var state = { page: 1 };
-    drawLabel(doc, data, state);
-    data.medications.forEach(function (m) {
-      if (isCd(m)) drawCdLog(doc, data, m, state);
-      else drawLog(doc, data, m, state);
-    });
+    if (isCdDoc(data)) {
+      drawCdCover(doc, data, state);
+      data.medications.forEach(function (m) { drawCdLog(doc, data, m, state); });
+      drawPouchSheet(doc, data, state);
+    } else {
+      drawLabel(doc, data, state);
+      data.medications.forEach(function (m) { drawLog(doc, data, m, state); });
+    }
     return doc;
   }
 
   function fileName(data) {
-    var bag = txt(data.bagNumber).replace(/[^A-Za-z0-9_-]+/g, "-") || "bag";
-    return "drug-bag-" + bag + "-log.pdf";
+    var id = txt(data.bagNumber)
+      .replace(/^(cd\s*safe|safe|drug\s*bag|bag|db)[\s._-]*/i, "")
+      .replace(/[^A-Za-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "unnumbered";
+    return (isCdDoc(data) ? "CD-Register-" : "Drug-Bag-") + id + ".pdf";
   }
 
   global.DrugBagPDF = {

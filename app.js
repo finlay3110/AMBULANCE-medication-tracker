@@ -2,48 +2,188 @@
 (function () {
   "use strict";
 
-  var KEY = "drug-bag-tracker/v1";
+  var KEY = "drug-bag-tracker/v2";
+  var OLD_KEY = "drug-bag-tracker/v1";
   var $ = function (id) { return document.getElementById(id); };
 
-  var state = { setup: {}, medications: [], editing: null };
+  /*
+   * Two entirely separate documents. Controlled drugs live in the CD safe, not
+   * in a drug bag, so they never share a list with bag stock.
+   */
+  var state = {
+    mode: "bag",
+    docs: {
+      bag: { setup: {}, medications: [] },
+      cd: { setup: {}, medications: [] }
+    },
+    editing: null
+  };
+
+  function doc() { return state.docs[state.mode]; }
+  function isCdMode() { return state.mode === "cd"; }
 
   var SETUP_FIELDS = [
     "companyName", "companyPhone", "companyAddress",
-    "bagNumber", "preppedBy", "checkedBy", "preppedDate", "sealNumber"
+    "bagNumber", "preppedBy", "checkedBy", "preppedDate", "sealNumber",
+    "safeLocation"
   ];
+
+  /* Wording that differs between the two document types. */
+  var WORDS = {
+    bag: {
+      detailsTitle: "Bag details",
+      contentsTitle: "Bag contents",
+      tabMeds: "2. Medications",
+      medEmpty: "No medications added yet. Add the first one above.",
+      saveTitle: "Save / load bag",
+      generateHint: "A4 PDF: page 1 is the bag label, followed by one usage log per medication.",
+      checkedByHint: "The label page carries a prepared-by / checked-by signature block. " +
+        "Leave blank to sign it by hand.",
+      identity: ["Drug bag number", "e.g. DB-014"],
+      preppedBy: ["Prepped by", "Name of person who prepped the bag"],
+      preppedDate: ["Prepped date", ""],
+      checkedBy: ["Checked by", "Second person for the two-person check (optional)"],
+      doses: ["Number of doses", "e.g. 12"],
+      summaryId: "Drug bag",
+      addTitle: "Add medication",
+      editTitle: "Edit medication"
+    },
+    cd: {
+      detailsTitle: "CD safe details",
+      contentsTitle: "Stock held in the safe",
+      tabMeds: "2. Controlled drugs",
+      medEmpty: "No controlled drugs added yet. Add the first one above.",
+      saveTitle: "Save / load register",
+      generateHint: "A4 PDF: a register front sheet, a running-balance register per drug, " +
+        "and a landscape sign-out sheet for drugs taken from the safe into a personal pouch.",
+      checkedByHint: "The front sheet carries a stock check signature block for both people.",
+      identity: ["CD safe reference", "e.g. Safe 2"],
+      preppedBy: ["Accountable officer", "Name of the person responsible for the safe"],
+      preppedDate: ["Register opened", ""],
+      checkedBy: ["Witness", "Second person for the stock check (optional)"],
+      doses: ["Quantity held", "e.g. 10"],
+      summaryId: "CD safe",
+      addTitle: "Add controlled drug",
+      editTitle: "Edit controlled drug"
+    }
+  };
+
+  function words() { return WORDS[state.mode]; }
+
+  /* Relabel a field and its placeholder. */
+  function relabel(inputId, spec) {
+    var input = $(inputId);
+    var span = input.parentNode.querySelector("span");
+    var required = span.querySelector("b");
+    span.textContent = spec[0] + " ";
+    if (required) span.appendChild(required);
+    if (spec[1] !== undefined && input.type !== "date") input.placeholder = spec[1];
+  }
+
+  function applyMode() {
+    var w = words();
+    document.querySelectorAll("[name=docMode]").forEach(function (r) {
+      r.checked = r.value === state.mode;
+    });
+    document.body.classList.toggle("cd-mode", isCdMode());
+
+    relabel("bagNumber", w.identity);
+    relabel("preppedBy", w.preppedBy);
+    relabel("preppedDate", w.preppedDate);
+    relabel("checkedBy", w.checkedBy);
+    relabel("mDoses", w.doses);
+
+    $("detailsTitle").textContent = w.detailsTitle;
+    $("contentsTitle").textContent = w.contentsTitle;
+    $("tabMedsLabel").textContent = w.tabMeds;
+    $("medEmpty").textContent = w.medEmpty;
+    $("saveTitle").textContent = w.saveTitle;
+    $("generateHint").textContent = w.generateHint;
+    $("checkedByHint").textContent = w.checkedByHint;
+
+    // Schedule and seal number are bag-only; safe location is CD-only.
+    $("f-mSchedule").hidden = isCdMode();
+    $("f-sealNumber").hidden = isCdMode();
+    $("f-safeLocation").hidden = !isCdMode();
+  }
+
+  function setMode(mode) {
+    if (mode === state.mode) return;
+    readSetup();
+    state.mode = mode;
+    clearMedForm();
+    fillSetup();
+    applyMode();
+    renderMeds();
+    save();
+  }
 
   /* ---------------- persistence ---------------- */
   function save() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({
-        setup: state.setup, medications: state.medications
-      }));
+      localStorage.setItem(KEY, JSON.stringify({ mode: state.mode, docs: state.docs }));
     } catch (e) { /* private browsing / quota — the app still works in-session */ }
   }
 
+  function readDoc(parsed) {
+    return {
+      setup: (parsed && parsed.setup) || {},
+      medications: (parsed && Array.isArray(parsed.medications)) ? parsed.medications : []
+    };
+  }
+
   function load() {
-    var raw;
-    try { raw = localStorage.getItem(KEY); } catch (e) { return; }
-    if (!raw) return;
+    var raw, old;
     try {
-      var parsed = JSON.parse(raw);
-      state.setup = parsed.setup || {};
-      state.medications = Array.isArray(parsed.medications) ? parsed.medications : [];
-    } catch (e) { /* ignore corrupt data */ }
+      raw = localStorage.getItem(KEY);
+      old = localStorage.getItem(OLD_KEY);
+    } catch (e) { return; }
+
+    if (raw) {
+      try {
+        var parsed = JSON.parse(raw);
+        state.mode = parsed.mode === "cd" ? "cd" : "bag";
+        state.docs.bag = readDoc(parsed.docs && parsed.docs.bag);
+        state.docs.cd = readDoc(parsed.docs && parsed.docs.cd);
+      } catch (e) { /* ignore corrupt data */ }
+      return;
+    }
+
+    // Migrate a v1 bag, moving any controlled drugs into the CD register.
+    if (old) {
+      try { state.docs.bag = splitLegacy(readDoc(JSON.parse(old))); }
+      catch (e) { /* ignore corrupt data */ }
+    }
+  }
+
+  /* v1 allowed CDs inside a bag; they belong in the safe, so move them out. */
+  function splitLegacy(bag) {
+    var cds = bag.medications.filter(function (m) { return m.schedule === "CD"; });
+    if (cds.length) {
+      state.docs.cd = {
+        setup: JSON.parse(JSON.stringify(bag.setup)),
+        medications: cds
+      };
+      state.docs.cd.setup.bagNumber = "";
+      bag.medications = bag.medications.filter(function (m) { return m.schedule !== "CD"; });
+    }
+    return bag;
   }
 
   /* ---------------- setup tab ---------------- */
   function readSetup() {
-    SETUP_FIELDS.forEach(function (f) { state.setup[f] = $(f).value.trim(); });
+    var setup = doc().setup;
+    SETUP_FIELDS.forEach(function (f) { setup[f] = $(f).value.trim(); });
     save();
     renderSummary();
   }
 
   function fillSetup() {
-    SETUP_FIELDS.forEach(function (f) { $(f).value = state.setup[f] || ""; });
+    var setup = doc().setup;
+    SETUP_FIELDS.forEach(function (f) { $(f).value = setup[f] || ""; });
     if (!$("preppedDate").value) {
       $("preppedDate").value = new Date().toISOString().slice(0, 10);
-      state.setup.preppedDate = $("preppedDate").value;
+      setup.preppedDate = $("preppedDate").value;
     }
   }
 
@@ -70,8 +210,7 @@
       batch: $("mBatch").value.trim(),
       expiry: $("mExpiry").value.trim(),
       doses: parseInt($("mDoses").value, 10),
-      schedule: $("mSchedule").value,
-      cdLog: $("mCdLog").checked
+      schedule: isCdMode() ? "CD" : $("mSchedule").value
     };
   }
 
@@ -84,8 +223,9 @@
       return "Expiry \u201c" + m.expiry + "\u201d was not understood. Use a month " +
         "(07/25, 10/2027, Oct 2025) or a full date (18/10/2025).";
     }
-    if (!m.doses || m.doses < 1) return "Number of doses must be at least 1.";
-    if (m.doses > 200) return "Number of doses is capped at 200 per medication.";
+    var label = words().doses[0];
+    if (!m.doses || m.doses < 1) return label + " must be at least 1.";
+    if (m.doses > 200) return label + " is capped at 200 per medication.";
     return null;
   }
 
@@ -94,17 +234,16 @@
       $(id).value = "";
     });
     $("mSchedule").value = "GSL";
-    $("mCdLog").checked = false;
     updateExpiryEcho();
     state.editing = null;
-    $("medFormTitle").textContent = "Add medication";
-    $("medSubmit").textContent = "Add medication";
+    $("medFormTitle").textContent = words().addTitle;
+    $("medSubmit").textContent = words().addTitle;
     $("medCancel").hidden = true;
     $("medError").hidden = true;
   }
 
   function startEdit(index) {
-    var m = state.medications[index];
+    var m = doc().medications[index];
     $("mName").value = m.name;
     $("mPresentation").value = m.presentation;
     $("mDose").value = m.dose;
@@ -112,10 +251,9 @@
     $("mExpiry").value = m.expiry;
     $("mDoses").value = m.doses;
     $("mSchedule").value = m.schedule || "GSL";
-    $("mCdLog").checked = usesCdLog(m);
     updateExpiryEcho();
     state.editing = index;
-    $("medFormTitle").textContent = "Edit medication";
+    $("medFormTitle").textContent = words().editTitle;
     $("medSubmit").textContent = "Save changes";
     $("medCancel").hidden = false;
     $("medError").hidden = true;
@@ -125,18 +263,14 @@
 
   function move(index, delta) {
     var to = index + delta;
-    if (to < 0 || to >= state.medications.length) return;
-    var m = state.medications.splice(index, 1)[0];
-    state.medications.splice(to, 0, m);
+    if (to < 0 || to >= doc().medications.length) return;
+    var m = doc().medications.splice(index, 1)[0];
+    doc().medications.splice(to, 0, m);
     if (state.editing === index) state.editing = to;
     save();
     renderMeds();
   }
 
-
-  function usesCdLog(m) {
-    return m.cdLog === true || (m.cdLog === undefined && m.schedule === "CD");
-  }
 
   /* Live confirmation of how the typed expiry was read. */
   function updateExpiryEcho() {
@@ -172,7 +306,7 @@
   function renderMeds() {
     var list = $("medList");
     list.textContent = "";
-    state.medications.forEach(function (m, i) {
+    doc().medications.forEach(function (m, i) {
       var row = document.createElement("div");
       row.className = "med s-" + (m.schedule || "GSL");
 
@@ -184,11 +318,24 @@
       tag.textContent = m.schedule || "GSL";
       name.appendChild(tag);
       name.appendChild(document.createTextNode(m.name));
+
+      var parsed = window.Expiry.parse(m.expiry);
+      var st = window.Expiry.status(parsed);
+      if (st === "expired" || st === "soon") {
+        var chip = document.createElement("span");
+        chip.className = "chip " + (st === "expired" ? "bad" : "warn");
+        chip.textContent = st === "expired"
+          ? "EXPIRED"
+          : "Expires in " + window.Expiry.daysLeft(parsed) + "d";
+        name.appendChild(chip);
+      }
+
       var meta = document.createElement("div");
       meta.className = "med-meta";
       meta.textContent = m.presentation + " · " + m.dose + " · x" + m.doses +
-        " dose" + (m.doses === 1 ? "" : "s") +
-        " · batch " + (m.batch || "—") + " · exp " + m.expiry;
+        (isCdMode() ? " held" : " dose" + (m.doses === 1 ? "" : "s")) +
+        " · batch " + (m.batch || "—") +
+        " · exp " + window.Expiry.format(parsed, m.expiry);
       main.appendChild(name);
       main.appendChild(meta);
 
@@ -199,7 +346,7 @@
        ["Edit", function () { startEdit(i); }, ""],
        ["Delete", function () {
           if (confirm("Remove " + m.name + " from this bag?")) {
-            state.medications.splice(i, 1);
+            doc().medications.splice(i, 1);
             if (state.editing === i) clearMedForm();
             save();
             renderMeds();
@@ -218,7 +365,7 @@
       list.appendChild(row);
     });
 
-    var n = state.medications.length;
+    var n = doc().medications.length;
     $("medCount").textContent = n;
     $("medCount2").textContent = n;
     $("medEmpty").hidden = n > 0;
@@ -226,16 +373,19 @@
   }
 
   function renderSummary() {
-    var totalDoses = state.medications.reduce(function (a, m) {
+    var totalDoses = doc().medications.reduce(function (a, m) {
       return a + (parseInt(m.doses, 10) || 0);
     }, 0);
+    var first = window.Expiry.earliest(doc().medications);
     var items = [
-      ["Drug bag", state.setup.bagNumber || "—"],
-      ["Company", state.setup.companyName || "—"],
-      ["Prepped by", state.setup.preppedBy || "—"],
-      ["Medications", String(state.medications.length)],
-      ["Total logged doses", String(totalDoses)],
-      ["Pages", String(1 + state.medications.length) + "+"]
+      [words().summaryId, doc().setup.bagNumber || "—"],
+      ["Company", doc().setup.companyName || "—"],
+      [isCdMode() ? "Earliest expiry" : "Bag expires",
+        first ? window.Expiry.format(first.parsed) : "—",
+        first ? window.Expiry.status(first.parsed) : "unknown"],
+      [isCdMode() ? "Controlled drugs" : "Medications", String(doc().medications.length)],
+      [isCdMode() ? "Total quantity held" : "Total logged doses", String(totalDoses)],
+      ["Pages", String((isCdMode() ? 2 : 1) + doc().medications.length) + "+"]
     ];
     var box = $("summary");
     box.textContent = "";
@@ -252,10 +402,10 @@
     });
 
     var warn = $("expiryWarning");
-    var expired = state.medications.filter(function (m) {
+    var expired = doc().medications.filter(function (m) {
       return window.Expiry.status(window.Expiry.parse(m.expiry)) === "expired";
     });
-    var soon = state.medications.filter(function (m) {
+    var soon = doc().medications.filter(function (m) {
       return window.Expiry.status(window.Expiry.parse(m.expiry)) === "soon";
     });
     if (expired.length) {
@@ -279,19 +429,22 @@
   function collect() {
     readSetup();
     var missing = [];
-    if (!state.setup.companyName) missing.push("company name");
-    if (!state.setup.companyPhone) missing.push("contact number");
-    if (!state.setup.bagNumber) missing.push("drug bag number");
-    if (!state.setup.preppedBy) missing.push("prepped by");
+    if (!doc().setup.companyName) missing.push("company name");
+    if (!doc().setup.companyPhone) missing.push("contact number");
+    if (!doc().setup.bagNumber) missing.push(words().identity[0].toLowerCase());
+    if (!doc().setup.preppedBy) missing.push(words().preppedBy[0].toLowerCase());
     if (missing.length) {
       return { error: "Complete the setup tab first — missing: " + missing.join(", ") + "." };
     }
-    if (!state.medications.length) {
-      return { error: "Add at least one medication before generating." };
+    if (!doc().medications.length) {
+      return { error: isCdMode()
+        ? "Add at least one controlled drug before generating."
+        : "Add at least one medication before generating." };
     }
     var data = {};
-    SETUP_FIELDS.forEach(function (f) { data[f] = state.setup[f] || ""; });
-    data.medications = state.medications;
+    SETUP_FIELDS.forEach(function (f) { data[f] = doc().setup[f] || ""; });
+    data.medications = doc().medications;
+    data.mode = state.mode;
     return { data: data };
   }
 
@@ -314,20 +467,21 @@
   }
 
   /* ---------------- import / export ---------------- */
-  /* "Drug bag 1" exports as Drug-Bag-1-saved.json */
+  /* "Drug bag 1" exports as Drug-Bag-1-saved.json, a safe as CD-Register-1-saved.json */
   function exportName() {
-    var id = (state.setup.bagNumber || "")
+    var prefix = isCdMode() ? "CD-Register-" : "Drug-Bag-";
+    var id = (doc().setup.bagNumber || "")
       .trim()
-      .replace(/^(drug\s*bag|bag|db)[\s._-]*/i, "")   // avoid "Drug-Bag-Drug-Bag-1"
+      .replace(/^(cd\s*safe|safe|drug\s*bag|bag|db)[\s._-]*/i, "")  // no "Drug-Bag-Drug-Bag-1"
       .replace(/[^A-Za-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
-    return "Drug-Bag-" + (id || "unnumbered") + "-saved.json";
+    return prefix + (id || "unnumbered") + "-saved.json";
   }
 
   function exportBag() {
     readSetup();
     var blob = new Blob([JSON.stringify({
-      setup: state.setup, medications: state.medications
+      mode: state.mode, setup: doc().setup, medications: doc().medications
     }, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
@@ -344,8 +498,10 @@
     reader.onload = function () {
       try {
         var parsed = JSON.parse(reader.result);
-        state.setup = parsed.setup || {};
-        state.medications = Array.isArray(parsed.medications) ? parsed.medications : [];
+        if (parsed.mode === "cd" || parsed.mode === "bag") state.mode = parsed.mode;
+        doc().setup = parsed.setup || {};
+        doc().medications = Array.isArray(parsed.medications) ? parsed.medications : [];
+        applyMode();
         fillSetup();
         clearMedForm();
         renderMeds();
@@ -361,9 +517,14 @@
   /* ---------------- wiring ---------------- */
   function init() {
     load();
+    applyMode();
     fillSetup();
     clearMedForm();
     renderMeds();
+
+    document.querySelectorAll("[name=docMode]").forEach(function (r) {
+      r.addEventListener("change", function () { if (r.checked) setMode(r.value); });
+    });
 
     document.querySelectorAll(".tab").forEach(function (t) {
       t.addEventListener("click", function () { readSetup(); showTab(t.dataset.tab); });
@@ -382,8 +543,8 @@
         $("medError").hidden = false;
         return;
       }
-      if (state.editing === null) state.medications.push(m);
-      else state.medications[state.editing] = m;
+      if (state.editing === null) doc().medications.push(m);
+      else doc().medications[state.editing] = m;
       save();
       clearMedForm();
       renderMeds();
@@ -414,9 +575,11 @@
     });
 
     $("resetAll").addEventListener("click", function () {
-      if (!confirm("Clear the company details and all medications?")) return;
-      state.setup = {};
-      state.medications = [];
+      if (!confirm("Clear the details and list for this " +
+          (isCdMode() ? "CD register" : "drug bag") + "? The other document is left alone."))
+        return;
+      doc().setup = {};
+      doc().medications = [];
       SETUP_FIELDS.forEach(function (f) { $(f).value = ""; });
       fillSetup();
       clearMedForm();
