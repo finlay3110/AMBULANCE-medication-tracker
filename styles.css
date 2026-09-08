@@ -477,3 +477,9 @@ body.cd-mode .mode:has(input:checked) { background: var(--cd-soft); }
 .foot-credit { margin: 14px 0 0; text-align: center; line-height: 1.7; }
 .foot-credit a { color: var(--accent); }
 @media (max-width: 700px) { .foot { padding: 0 12px 36px; } }
+
+/* ---------- company profile and CQC ---------- */
+.company-actions { margin: 0 0 16px; }
+.check-row { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.check-row input { width: auto; flex: none; margin: 0; }
+.check-row span { font-size: 13px; font-weight: 600; color: var(--ink-soft); }

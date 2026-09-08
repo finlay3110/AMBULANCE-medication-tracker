@@ -230,6 +230,13 @@ function monthFrom(value) {
   return year + "-" + m[1].padStart(2, "0");
 }
 
+/* A json file that is valid but none of ours. */
+function junkPath() {
+  const p = path.join(os.tmpdir(), "smoke-junk.json");
+  fs.writeFileSync(p, JSON.stringify({ hello: "world" }));
+  return p;
+}
+
 /* ---------------- app behaviour ----------------------------------------- */
 async function testApp(page) {
   console.log("\napp behaviour");
@@ -441,6 +448,39 @@ async function testApp(page) {
   eq("clearing the date clears the flag",
     await page.locator(".chip.bad").filter({ hasText: "EXPIRES IN SERVICE" }).count(), 0);
 
+  // CQC: the number is only asked for, and only printed, when registered.
+  await page.click('[data-tab="setup"]');
+  check("the registration number is hidden until it applies",
+    await page.locator("#f-cqcNumber").isHidden());
+  await page.check("#cqcRegistered");
+  check("and appears once ticked", await page.locator("#f-cqcNumber").isVisible());
+
+  await page.click('[data-tab="generate"]');
+  await page.click("#generateBtn");
+  check("generating is refused without the number",
+    (await page.textContent("#genError")).includes("CQC registration number"),
+    await page.textContent("#genError"));
+
+  await page.click('[data-tab="setup"]');
+  await page.fill("#cqcNumber", "1-234567890");
+  const cqcOnPage = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    const d = Object.assign({}, st.docs.bag.setup,
+      { medications: st.docs.bag.medications, mode: "bag" });
+    return window.DrugBagPDF.build(d).internal.pages[1].join("\n").indexOf("CQC 1-234567890") >= 0;
+  });
+  check("and is printed beside the company name", cqcOnPage);
+
+  await page.uncheck("#cqcRegistered");
+  const cqcGone = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    const d = Object.assign({}, st.docs.bag.setup,
+      { medications: st.docs.bag.medications, mode: "bag" });
+    return window.DrugBagPDF.build(d).internal.pages[1].join("\n").indexOf("CQC") < 0;
+  });
+  check("un-ticking removes it from the document", cqcGone);
+  await page.check("#cqcRegistered");
+
   // Company logo: stored scaled down, carried into the export, drawn on the PDF.
   await page.click('[data-tab="setup"]');
   const logoPath = path.join(os.tmpdir(), "smoke-logo.png");
@@ -484,6 +524,49 @@ async function testApp(page) {
   check("the export carries the logo",
     JSON.parse(fs.readFileSync(savedBag, "utf8")).setup.logo.startsWith("data:image/png"));
 
+  // The company profile travels on its own, logo and CQC included.
+  await page.click('[data-tab="setup"]');
+  const [companyFile] = await Promise.all([
+    page.waitForEvent("download"), page.click("#companyExportBtn")]);
+  eq("the company export is named after the company",
+    companyFile.suggestedFilename(), "Company-Test-Medical-Ltd.json");
+  const companyPath = path.join(os.tmpdir(), "smoke-company.json");
+  await companyFile.saveAs(companyPath);
+  const profile = JSON.parse(fs.readFileSync(companyPath, "utf8"));
+  eq("it is stamped with its format", profile.format, "drug-bag-tracker/company");
+  eq("carries the company", profile.companyName, "Test Medical Ltd");
+  eq("carries the CQC registration", profile.cqcNumber, "1-234567890");
+  check("carries the logo", String(profile.logo).startsWith("data:image/png"));
+  check("and nothing about the bag itself",
+    profile.bagNumber === undefined && profile.medications === undefined);
+
+  // Wipe the company half, then load it back from the file.
+  await page.fill("#companyName", "Wrong Ltd");
+  await page.fill("#companyPhone", "000");
+  await page.uncheck("#cqcRegistered");
+  await page.setInputFiles("#companyFile", companyPath);
+  await page.waitForFunction(() =>
+    document.getElementById("companyResult").textContent.indexOf("Loaded company") >= 0);
+  eq("import restores the company", await page.inputValue("#companyName"), "Test Medical Ltd");
+  eq("and the contact", await page.inputValue("#companyPhone"), "01234 567890");
+  check("and the CQC registration", await page.isChecked("#cqcRegistered"));
+  eq("with its number", await page.inputValue("#cqcNumber"), "1-234567890");
+  eq("leaving the bag number alone", await page.inputValue("#bagNumber"), "1");
+
+  // A whole bag export also works as a source of company details.
+  await page.fill("#companyName", "Wrong Ltd");
+  await page.setInputFiles("#companyFile", savedBag);
+  await page.waitForFunction(() =>
+    document.getElementById("companyResult").textContent.indexOf("Loaded") >= 0);
+  eq("company details lift out of a bag export",
+    await page.inputValue("#companyName"), "Test Medical Ltd");
+
+  await page.setInputFiles("#companyFile", junkPath());
+  await page.waitForFunction(() =>
+    document.getElementById("companyResult").className.indexOf("bad") >= 0);
+  eq("a file with no company details changes nothing",
+    await page.inputValue("#companyName"), "Test Medical Ltd");
+
   // Import, from the setup tab, restores a document over whatever is open.
   await page.click('[data-tab="setup"]');
   check("setup offers an import", await page.isVisible("#importSetupBtn"));
@@ -520,9 +603,7 @@ async function testApp(page) {
   eq("and loads its stock", await page.textContent("#medCount"), "1");
 
   // A file that is not one of ours must not wipe what is open.
-  const junk = path.join(os.tmpdir(), "smoke-junk.json");
-  fs.writeFileSync(junk, JSON.stringify({ hello: "world" }));
-  await page.setInputFiles("#importFile", junk);
+  await page.setInputFiles("#importFile", junkPath());
   await page.waitForFunction(() =>
     document.getElementById("importResult").className.indexOf("bad") >= 0);
   eq("a foreign json is refused", await page.textContent("#medCount"), "1");

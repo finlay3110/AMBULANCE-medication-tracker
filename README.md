@@ -72,6 +72,25 @@ Controlled drugs in the catalogue are offered only on a CD register. Searching
 for one on a drug bag says so and points at the other document rather than
 letting it be added.
 
+### Company profile
+
+Company details are the same on every bag and every register, so they can be
+saved once and reused. **Export company details** on the setup tab writes a small
+JSON file — name, contact, address, CQC registration and the logo, and nothing
+about any particular bag. **Import company details** loads it into whichever
+document you are setting up, leaving the bag or safe details untouched.
+
+Import also accepts a whole exported bag or register and takes just the company
+half of it, so details can be lifted out of any old export.
+
+### CQC registration
+
+Not every organisation is registered, so it is a toggle. Tick it and a
+registration number is asked for; the number is then printed beside the company
+name on the label and the register front sheet. Leave it off and nothing about
+CQC appears anywhere. A ticked box with no number blocks generation, rather than
+printing a claim with nothing behind it.
+
 ### Batches
 
 Each batch is held as its own entry, so a drug held in two batches is added

@@ -111,6 +111,13 @@
     return data.mode === "cd";
   }
 
+  /* Company name, with the CQC registration beside it when there is one. */
+  function companyLine(data) {
+    var name = txt(data.companyName);
+    var cqc = txt(data.cqcNumber);
+    return (data.cqcRegistered && cqc) ? name + "  \u00b7  CQC " + cqc : name;
+  }
+
   function unitOf(med) {
     return txt(med.unit);
   }
@@ -341,7 +348,8 @@
     setFont(doc, 15, "bold");
     doc.text("DRUG BAG CONTENTS", textX, y + 8.5);
     setFont(doc, 10, "normal");
-    doc.text(txt(data.companyName), textX, y + 15);
+    doc.text(wrap(doc, companyLine(data), CONTENT_W - (textX - PAGE.ml) - 40)[0],
+      textX, y + 15);
 
     setFont(doc, 9, "normal");
     doc.text("DRUG BAG No.", PAGE.w - PAGE.mr - 4, y + 7, { align: "right" });
@@ -651,7 +659,8 @@
     setFont(doc, 15, "bold");
     doc.text("CONTROLLED DRUGS REGISTER", textX, y + 8.5);
     setFont(doc, 10, "normal");
-    doc.text(txt(data.companyName), textX, y + 15);
+    doc.text(wrap(doc, companyLine(data), CONTENT_W - (textX - PAGE.ml) - 40)[0],
+      textX, y + 15);
     setFont(doc, 9, "normal");
     doc.text("CD SAFE", PAGE.w - PAGE.mr - 4, y + 7, { align: "right" });
     setFont(doc, 16, "bold");

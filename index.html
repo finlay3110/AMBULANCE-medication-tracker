@@ -78,7 +78,14 @@
 
     <div class="card">
       <h2>Company details</h2>
-      <p class="hint">These appear on the bag label and in the "if found" notice.</p>
+      <p class="hint">These appear on the bag label and in the &ldquo;if found&rdquo; notice.
+        Save them once and load them into any bag or register &mdash; the logo comes too.</p>
+      <div class="actions company-actions">
+        <button type="button" class="btn ghost small" id="companyExportBtn">Export company details</button>
+        <button type="button" class="btn ghost small" id="companyImportBtn">Import company details</button>
+        <input type="file" id="companyFile" accept="application/json,.json" hidden>
+      </div>
+      <p class="notice" id="companyResult" hidden></p>
       <div class="grid">
         <label class="field">
           <span>Company name <b>*</b></span>
@@ -91,6 +98,18 @@
         <label class="field span2">
           <span>Address</span>
           <textarea id="companyAddress" rows="3" placeholder="Unit 4, Example Way, Townsville, AB1 2CD"></textarea>
+        </label>
+        <div class="field span2" id="f-cqc">
+          <label class="check-row">
+            <input type="checkbox" id="cqcRegistered">
+            <span>CQC registered</span>
+          </label>
+          <small class="echo">Tick if your organisation is registered with the Care Quality
+            Commission. The registration number is printed beside the company name.</small>
+        </div>
+        <label class="field span2" id="f-cqcNumber" hidden>
+          <span>CQC registration number <b>*</b></span>
+          <input type="text" id="cqcNumber" placeholder="e.g. 1-234567890" autocomplete="off">
         </label>
         <div class="field span2" id="f-logo">
           <span>Company logo</span>

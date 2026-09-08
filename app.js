@@ -25,8 +25,12 @@
   var SETUP_FIELDS = [
     "companyName", "companyPhone", "companyAddress",
     "bagNumber", "preppedBy", "checkedBy", "preppedDate", "sealNumber",
-    "safeLocation", "inServiceUntil"
+    "safeLocation", "inServiceUntil", "cqcNumber"
   ];
+
+  /* The company profile: everything that is about the organisation rather than
+     a particular bag or safe, so it can be saved once and reused. */
+  var COMPANY_FIELDS = ["companyName", "companyPhone", "companyAddress", "cqcNumber"];
 
   // Kept out of SETUP_FIELDS: not a text input, and set through its own control.
   var LOGO_MAX_EDGE = 480;      // px, plenty for print at the size it is drawn
@@ -223,6 +227,7 @@
     var before = JSON.stringify(setup);
     var wasInService = setup.inServiceUntil;
     SETUP_FIELDS.forEach(function (f) { setup[f] = $(f).value.trim(); });
+    setup.cqcRegistered = $("cqcRegistered").checked;
     if (JSON.stringify(setup) !== before) touch();
     save();
     // The service window decides every expiry flag, so the list needs redrawing.
@@ -233,12 +238,110 @@
   function fillSetup() {
     var setup = doc().setup;
     SETUP_FIELDS.forEach(function (f) { $(f).value = setup[f] || ""; });
+    $("cqcRegistered").checked = !!setup.cqcRegistered;
+    syncCqc();
     showLogo();
     resetLogoHint();
     if (!$("preppedDate").value) {
       $("preppedDate").value = new Date().toISOString().slice(0, 10);
       setup.preppedDate = $("preppedDate").value;
     }
+  }
+
+  /* ---------------- company profile ---------------- */
+
+  /* The registration number is only asked for, and only printed, when the
+     organisation says it is registered. */
+  function syncCqc() {
+    $("f-cqcNumber").hidden = !$("cqcRegistered").checked;
+  }
+
+  function companyMessage(kind, text) {
+    var box = $("companyResult");
+    box.className = "notice " + kind;
+    box.textContent = text;
+    box.hidden = false;
+  }
+
+  function companyFileName() {
+    var name = (doc().setup.companyName || "")
+      .trim().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return "Company-" + (name || "details") + ".json";
+  }
+
+  function exportCompany() {
+    readSetup();
+    var setup = doc().setup;
+    var profile = { format: "drug-bag-tracker/company", version: 1 };
+    COMPANY_FIELDS.forEach(function (f) { profile[f] = setup[f] || ""; });
+    profile.cqcRegistered = !!setup.cqcRegistered;
+    if (setup.logo) {
+      profile.logo = setup.logo;
+      profile.logoW = setup.logoW;
+      profile.logoH = setup.logoH;
+    }
+
+    var blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = companyFileName();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    companyMessage("good", "Saved as " + companyFileName() + ".");
+  }
+
+  /*
+   * Accepts a company file, and also a whole exported bag or register, taking
+   * just the company half of it — so details can be lifted from any old export.
+   */
+  function companyFrom(parsed) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    if (parsed.format === "drug-bag-tracker/company") return parsed;
+    if (parsed.setup && typeof parsed.setup === "object") return parsed.setup;
+    if (typeof parsed.companyName === "string") return parsed;
+    return null;
+  }
+
+  function importCompany(file) {
+    var reader = new FileReader();
+    reader.onerror = function () { companyMessage("bad", "That file could not be read."); };
+    reader.onload = function () {
+      var parsed;
+      try {
+        parsed = JSON.parse(reader.result);
+      } catch (e) {
+        companyMessage("bad", "\u201c" + file.name + "\u201d is not a valid .json file.");
+        return;
+      }
+      var profile = companyFrom(parsed);
+      if (!profile) {
+        companyMessage("bad", "\u201c" + file.name + "\u201d does not contain company details. " +
+          "Nothing has been changed.");
+        return;
+      }
+
+      var setup = doc().setup;
+      COMPANY_FIELDS.forEach(function (f) {
+        if (typeof profile[f] === "string") setup[f] = profile[f];
+      });
+      setup.cqcRegistered = !!profile.cqcRegistered;
+      if (typeof profile.logo === "string" && profile.logo) {
+        setup.logo = profile.logo;
+        setup.logoW = profile.logoW || 0;
+        setup.logoH = profile.logoH || 0;
+      }
+      touch();
+      fillSetup();
+      save();
+      renderSummary();
+      companyMessage("good", "Loaded company details for " +
+        (setup.companyName || "this organisation") +
+        (profile.logo ? ", including the logo." : "."));
+    };
+    reader.readAsText(file);
   }
 
   /* ---------------- theme ---------------- */
@@ -901,6 +1004,9 @@
     var missing = [];
     if (!doc().setup.companyName) missing.push("company name");
     if (!doc().setup.companyPhone) missing.push("contact number");
+    if (doc().setup.cqcRegistered && !doc().setup.cqcNumber) {
+      missing.push("CQC registration number");
+    }
     if (!doc().setup.bagNumber) missing.push(words().identity[0].toLowerCase());
     if (!doc().setup.preppedBy) missing.push(words().preppedBy[0].toLowerCase());
     if (missing.length) {
@@ -913,6 +1019,7 @@
     }
     var data = {};
     SETUP_FIELDS.forEach(function (f) { data[f] = doc().setup[f] || ""; });
+    data.cqcRegistered = !!doc().setup.cqcRegistered;
     data.logo = doc().setup.logo || "";
     data.logoW = doc().setup.logoW || 0;
     data.logoH = doc().setup.logoH || 0;
@@ -1055,7 +1162,12 @@
     document.querySelectorAll("[data-goto]").forEach(function (b) {
       b.addEventListener("click", function () { readSetup(); showTab(b.dataset.goto); });
     });
-    SETUP_FIELDS.forEach(function (f) { $(f).addEventListener("change", readSetup); });
+    SETUP_FIELDS.forEach(function (f) {
+      // Both events: "change" alone only fires on blur, so a value typed and
+      // then left without clicking away was never persisted.
+      $(f).addEventListener("change", readSetup);
+      $(f).addEventListener("input", readSetup);
+    });
 
     $("medForm").addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -1135,6 +1247,18 @@
       }
     });
 
+    $("cqcRegistered").addEventListener("change", function () {
+      syncCqc();
+      readSetup();
+      if (this.checked) $("cqcNumber").focus();
+    });
+    $("companyExportBtn").addEventListener("click", exportCompany);
+    $("companyImportBtn").addEventListener("click", function () { $("companyFile").click(); });
+    $("companyFile").addEventListener("change", function () {
+      if (this.files && this.files[0]) importCompany(this.files[0]);
+      this.value = "";
+    });
+
     $("logoBtn").addEventListener("click", function () { $("logoFile").click(); });
     $("logoFile").addEventListener("change", function () {
       if (this.files && this.files[0]) readLogo(this.files[0]);
@@ -1163,6 +1287,7 @@
       doc().setup = {};
       doc().medications = [];
       doc().meta = {};
+      $("companyResult").hidden = true;
       showLogo();
       resetLogoHint();
       SETUP_FIELDS.forEach(function (f) { $(f).value = ""; });
