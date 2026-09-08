@@ -185,6 +185,19 @@ tells you which of two printouts is the current one.
 
 Designed for desktop, with a single-column responsive layout for phones.
 
+## Dark mode
+
+The interface follows the operating system's light or dark setting by default.
+A **Theme** button in the top bar cycles auto → light → dark, and an explicit
+choice is remembered and wins over the system setting. It is stored separately
+from your documents, so it survives "clear all" and applies to both.
+
+The theme is applied before the first paint, so a chosen dark theme does not
+flash light on load. Colours are defined once as tokens, with dark redefining
+only the tokens, so a new component picks up both themes by using them.
+
+Screen only — the generated PDF is a printed document and stays light.
+
 ## Files
 
 | File | Purpose |

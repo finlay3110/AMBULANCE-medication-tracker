@@ -241,6 +241,37 @@
     }
   }
 
+  /* ---------------- theme ---------------- */
+
+  /*
+   * Kept under its own key rather than in the document state, so it survives
+   * "clear all" and is shared by both documents. "auto" stores nothing on the
+   * root element and lets prefers-color-scheme decide.
+   */
+  var THEME_KEY = "drug-bag-tracker/theme";
+  var THEMES = ["auto", "light", "dark"];
+  var theme = "auto";
+
+  function applyTheme() {
+    if (theme === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", theme);
+    $("themeBtn").textContent = "Theme: " + theme;
+    $("themeBtn").setAttribute("aria-label", "Colour theme: " + theme + ". Click to change.");
+  }
+
+  function loadTheme() {
+    var stored;
+    try { stored = localStorage.getItem(THEME_KEY); } catch (e) { stored = null; }
+    if (THEMES.indexOf(stored) >= 0) theme = stored;
+    applyTheme();
+  }
+
+  function cycleTheme() {
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* not fatal */ }
+    applyTheme();
+  }
+
   /* ---------------- expiry picker ---------------- */
 
   /* Safari has never supported <input type="month">; it renders a text box. */
@@ -1007,6 +1038,7 @@
 
   /* ---------------- wiring ---------------- */
   function init() {
+    loadTheme();
     load();
     applyMode();
     fillSetup();
@@ -1116,6 +1148,8 @@
       if (this.files && this.files[0]) importBag(this.files[0]);
       this.value = "";
     });
+
+    $("themeBtn").addEventListener("click", cycleTheme);
 
     $("resetAll").addEventListener("click", function () {
       var what = isCdMode() ? "CD register" : "drug bag";

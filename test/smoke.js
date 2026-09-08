@@ -540,6 +540,31 @@ async function testApp(page) {
   eq("the bag came through unharmed", await page.inputValue("#bagNumber"), "1");
   eq("with its medications", await page.textContent("#medCount"), "2");
 
+  // Theme: auto follows the system, and an explicit choice overrides it.
+  const rootTheme = () => page.getAttribute("html", "data-theme");
+  eq("starts on auto", await page.textContent("#themeBtn"), "Theme: auto");
+  eq("auto leaves the system in charge", await rootTheme(), null);
+
+  await page.click("#themeBtn");
+  eq("cycles to light", await page.textContent("#themeBtn"), "Theme: light");
+  eq("and says so on the root", await rootTheme(), "light");
+
+  await page.click("#themeBtn");
+  eq("cycles to dark", await page.textContent("#themeBtn"), "Theme: dark");
+  eq("and says so on the root", await rootTheme(), "dark");
+  check("dark actually repaints", await page.evaluate(() => {
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const parts = bg.match(/\d+/g).map(Number);
+    return parts[0] + parts[1] + parts[2] < 200;   // a dark page, not a light one
+  }));
+
+  await page.reload();
+  eq("the choice survives a reload", await rootTheme(), "dark");
+  eq("and the button agrees", await page.textContent("#themeBtn"), "Theme: dark");
+
+  await page.click("#themeBtn");
+  eq("cycles back to auto", await rootTheme(), null);
+
   // Disclaimer, licence and credit are on the page, not only in the repo.
   check("the as-is notice is always visible",
     (await page.textContent(".foot-line")).includes("Provided as is, with no warranty"));

@@ -3,9 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Drug Bag Tracker</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b6b3a'/%3E%3Cpath d='M14 6h4v8h8v4h-8v8h-4v-8H6v-4h8z' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
+<script>
+  /* Applied before first paint so a chosen dark theme does not flash light.
+     app.js owns the toggle; this only restores what was stored. */
+  try {
+    var t = localStorage.getItem("drug-bag-tracker/theme");
+    if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) { /* private browsing: fall back to the system preference */ }
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -17,6 +26,7 @@
     </div>
   </div>
   <div class="topbar-actions">
+    <button type="button" class="btn ghost" id="themeBtn" aria-live="polite">Theme: auto</button>
     <button type="button" class="btn ghost" id="resetAll">Clear all</button>
     <button type="button" class="btn primary" id="generateTop">Generate PDF</button>
   </div>
