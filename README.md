@@ -30,6 +30,15 @@ static host). There are three tabs:
    Entries can be edited, reordered and removed.
 3. **Generate** — download the PDF, or preview it in a new tab.
 
+### Company logo
+
+Setup takes an optional PNG or JPEG, drawn at the top of the bag label and the
+register front sheet on a white panel sized to the image, so a dark logo still
+reads against the coloured masthead. It is scaled down to 480px on its longest
+edge before being stored, kept with that document, and included when the
+document is exported. An image that will not fit in storage is refused with a
+reason, and a logo that cannot be drawn is skipped rather than stopping the PDF.
+
 ### Batches
 
 Each batch is held as its own entry, so a drug held in two batches is added

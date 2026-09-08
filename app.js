@@ -28,6 +28,10 @@
     "safeLocation"
   ];
 
+  // Kept out of SETUP_FIELDS: not a text input, and set through its own control.
+  var LOGO_MAX_EDGE = 480;      // px, plenty for print at the size it is drawn
+  var LOGO_MAX_BYTES = 400000;  // keep localStorage well inside its quota
+
   /* Wording that differs between the two document types. */
   var WORDS = {
     bag: {
@@ -127,10 +131,20 @@
   }
 
   /* ---------------- persistence ---------------- */
+  /*
+   * Returns false when the browser refused to store (private browsing, or the
+   * quota is full — a large logo makes that a real possibility). The work is
+   * still usable in this session, so say so rather than failing silently.
+   */
   function save() {
     try {
       localStorage.setItem(KEY, JSON.stringify({ mode: state.mode, docs: state.docs }));
-    } catch (e) { /* private browsing / quota — the app still works in-session */ }
+      state.storageFailed = false;
+      return true;
+    } catch (e) {
+      state.storageFailed = true;
+      return false;
+    }
   }
 
   function readDoc(parsed) {
@@ -206,10 +220,88 @@
   function fillSetup() {
     var setup = doc().setup;
     SETUP_FIELDS.forEach(function (f) { $(f).value = setup[f] || ""; });
+    showLogo();
+    resetLogoHint();
     if (!$("preppedDate").value) {
       $("preppedDate").value = new Date().toISOString().slice(0, 10);
       setup.preppedDate = $("preppedDate").value;
     }
+  }
+
+  /* ---------------- company logo ---------------- */
+
+  function showLogo() {
+    var src = doc().setup.logo || "";
+    $("logoPreview").hidden = !src;
+    $("logoRemove").hidden = !src;
+    if (src) $("logoImg").src = src;
+    $("logoBtn").textContent = src ? "Replace image\u2026" : "Choose image\u2026";
+  }
+
+  function logoMessage(kind, text) {
+    var hint = $("logoHint");
+    hint.className = "echo" + (kind ? " " + kind : "");
+    hint.textContent = text;
+  }
+
+  function resetLogoHint() {
+    logoMessage("", "PNG or JPEG, printed at the top of the label. Stored with this document " +
+      "and included when you export it.");
+  }
+
+  /* Scale down before storing: a phone photo would blow the storage quota. */
+  function readLogo(file) {
+    var reader = new FileReader();
+    reader.onerror = function () { logoMessage("bad", "That image could not be read."); };
+    reader.onload = function () {
+      var img = new Image();
+      img.onerror = function () {
+        logoMessage("bad", "\u201c" + file.name + "\u201d could not be read as an image.");
+      };
+      img.onload = function () {
+        var scale = Math.min(1, LOGO_MAX_EDGE / Math.max(img.width, img.height));
+        var w = Math.max(1, Math.round(img.width * scale));
+        var h = Math.max(1, Math.round(img.height * scale));
+        var canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+
+        // PNG keeps transparency; fall back to JPEG if that comes out too big.
+        var data = canvas.toDataURL("image/png");
+        if (data.length > LOGO_MAX_BYTES) data = canvas.toDataURL("image/jpeg", 0.85);
+        if (data.length > LOGO_MAX_BYTES) {
+          logoMessage("bad", "That image is too large to store. Try a smaller or simpler one.");
+          return;
+        }
+
+        doc().setup.logo = data;
+        doc().setup.logoW = w;
+        doc().setup.logoH = h;
+        touch();
+        showLogo();
+        if (save()) {
+          logoMessage("good", "Logo set from \u201c" + file.name + "\u201d.");
+        } else {
+          logoMessage("bad", "Logo set, but this browser would not store it \u2014 export the " +
+            ".json to keep it.");
+        }
+        renderSummary();
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeLogo() {
+    delete doc().setup.logo;
+    delete doc().setup.logoW;
+    delete doc().setup.logoH;
+    touch();
+    showLogo();
+    resetLogoHint();
+    save();
+    renderSummary();
   }
 
   /* ---------------- tabs ---------------- */
@@ -460,7 +552,12 @@
     if (!$("pdfReminder").hidden) showPdfReminder();
 
     var backup = $("backupWarning");
-    if (needsBackup()) {
+    if (state.storageFailed) {
+      backup.className = "notice bad";
+      backup.textContent = "This browser is not storing your work \u2014 it may be full, or in " +
+        "private browsing. Export the .json now, or you will lose this when the tab closes.";
+      backup.hidden = false;
+    } else if (needsBackup()) {
       var never = !(doc().meta || {}).exportedAt;
       backup.className = "notice warn";
       backup.textContent = never
@@ -541,6 +638,9 @@
     }
     var data = {};
     SETUP_FIELDS.forEach(function (f) { data[f] = doc().setup[f] || ""; });
+    data.logo = doc().setup.logo || "";
+    data.logoW = doc().setup.logoW || 0;
+    data.logoH = doc().setup.logoH || 0;
     data.medications = doc().medications;
     data.mode = state.mode;
     return { data: data };
@@ -724,6 +824,13 @@
     });
 
     $("exportBtn").addEventListener("click", exportBag);
+    $("logoBtn").addEventListener("click", function () { $("logoFile").click(); });
+    $("logoFile").addEventListener("change", function () {
+      if (this.files && this.files[0]) readLogo(this.files[0]);
+      this.value = "";
+    });
+    $("logoRemove").addEventListener("click", removeLogo);
+
     $("importBtn").addEventListener("click", beginImport);
     $("importSetupBtn").addEventListener("click", beginImport);
     $("importFile").addEventListener("change", function () {
@@ -743,6 +850,8 @@
       doc().setup = {};
       doc().medications = [];
       doc().meta = {};
+      showLogo();
+      resetLogoHint();
       SETUP_FIELDS.forEach(function (f) { $(f).value = ""; });
       fillSetup();
       clearMedForm();

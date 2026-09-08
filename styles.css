@@ -213,3 +213,12 @@ body.cd-mode .mode:has(input:checked) { background: #fbf2f2; }
 .btn.small { padding: 7px 13px; font-size: 13px; }
 .notice.reminder .btn { flex: none; }
 @media (max-width: 700px) { .notice.reminder .btn { flex: 1 1 100%; } }
+
+/* ---------- company logo ---------- */
+.logo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.logo-preview {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 108px; height: 54px; padding: 5px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+}
+.logo-preview img { max-width: 100%; max-height: 100%; display: block; }

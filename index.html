@@ -82,6 +82,17 @@
           <span>Address</span>
           <textarea id="companyAddress" rows="3" placeholder="Unit 4, Example Way, Townsville, AB1 2CD"></textarea>
         </label>
+        <div class="field span2" id="f-logo">
+          <span>Company logo</span>
+          <div class="logo-row">
+            <span class="logo-preview" id="logoPreview" hidden><img id="logoImg" alt=""></span>
+            <button type="button" class="btn ghost small" id="logoBtn">Choose image&hellip;</button>
+            <button type="button" class="btn ghost small" id="logoRemove" hidden>Remove</button>
+            <input type="file" id="logoFile" accept="image/png,image/jpeg" hidden>
+          </div>
+          <small class="echo" id="logoHint">PNG or JPEG, printed at the top of the label.
+            Stored with this document and included when you export it.</small>
+        </div>
       </div>
     </div>
 

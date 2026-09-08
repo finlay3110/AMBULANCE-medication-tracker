@@ -39,6 +39,37 @@
     return null;
   }
 
+  /*
+   * Company logo, fitted inside a white panel so a dark logo still reads on the
+   * coloured masthead. Returns the width used, or 0 when there is no logo.
+   */
+  function drawLogo(doc, data, x, y, boxW, boxH) {
+    var src = txt(data.logo);
+    if (!src) return 0;
+    var iw = data.logoW || 0;
+    var ih = data.logoH || 0;
+    if (iw <= 0 || ih <= 0) return 0;
+
+    var pad = 1.5;
+    var scale = Math.min((boxW - pad * 2) / iw, (boxH - pad * 2) / ih);
+    var w = iw * scale;
+    var h = ih * scale;
+    // Panel fits the logo rather than the whole box, so a wide or tall logo
+    // does not sit in a slab of white.
+    var panelW = w + pad * 2;
+    var panelH = h + pad * 2;
+    var panelY = y + (boxH - panelH) / 2;
+    try {
+      doc.setFillColor(255, 255, 255);
+      doc.rect(x, panelY, panelW, panelH, "F");
+      doc.addImage(src, src.indexOf("image/png") >= 0 ? "PNG" : "JPEG",
+        x + pad, panelY + pad, w, h);
+    } catch (e) {
+      return 0;   // an unreadable logo must never stop the document generating
+    }
+    return panelW;
+  }
+
   function isCdDoc(data) {
     return data.mode === "cd";
   }
@@ -234,11 +265,13 @@
     // Masthead
     doc.setFillColor(18, 33, 47);
     doc.rect(PAGE.ml, y, CONTENT_W, 20, "F");
+    var logoW = drawLogo(doc, data, PAGE.ml + 3, y + 3, 26, 14);
+    var textX = PAGE.ml + 4 + (logoW ? logoW + 3 : 0);
     doc.setTextColor(255, 255, 255);
     setFont(doc, 15, "bold");
-    doc.text("DRUG BAG CONTENTS", PAGE.ml + 4, y + 8.5);
+    doc.text("DRUG BAG CONTENTS", textX, y + 8.5);
     setFont(doc, 10, "normal");
-    doc.text(txt(data.companyName), PAGE.ml + 4, y + 15);
+    doc.text(txt(data.companyName), textX, y + 15);
 
     setFont(doc, 9, "normal");
     doc.text("DRUG BAG No.", PAGE.w - PAGE.mr - 4, y + 7, { align: "right" });
@@ -545,11 +578,13 @@
 
     doc.setFillColor(CD_BG[0], CD_BG[1], CD_BG[2]);
     doc.rect(PAGE.ml, y, CONTENT_W, 20, "F");
+    var logoW = drawLogo(doc, data, PAGE.ml + 3, y + 3, 26, 14);
+    var textX = PAGE.ml + 4 + (logoW ? logoW + 3 : 0);
     doc.setTextColor(255, 255, 255);
     setFont(doc, 15, "bold");
-    doc.text("CONTROLLED DRUGS REGISTER", PAGE.ml + 4, y + 8.5);
+    doc.text("CONTROLLED DRUGS REGISTER", textX, y + 8.5);
     setFont(doc, 10, "normal");
-    doc.text(txt(data.companyName), PAGE.ml + 4, y + 15);
+    doc.text(txt(data.companyName), textX, y + 15);
     setFont(doc, 9, "normal");
     doc.text("CD SAFE", PAGE.w - PAGE.mr - 4, y + 7, { align: "right" });
     setFont(doc, 16, "bold");

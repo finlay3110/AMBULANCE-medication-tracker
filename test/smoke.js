@@ -15,6 +15,13 @@ const path = require("path");
 const { chromium } = require("playwright");
 
 const ROOT = path.join(__dirname, "..");
+
+/* A 240x80 PNG, written to a temp file so the logo picker has something real. */
+const TEST_LOGO_PNG = "iVBORw0KGgoAAAANSUhEUgAAAPAAAABQCAIAAACoK28rAAAAzUlEQVR42u3UwQnAIBBFQZXcTEWmJC3H" +
+  "ltJRCrABBW+BZKaBhc9jY64lwFckEyBoEDQIGgSNoEHQIGgQNAgaQYOgQdAgaBA0ggZBg6BB0LBymGDf" +
+  "0++3Tp/tsr8PjaBB0CBoEDQIGkGDoEHQIGgQNIIGQYOgQdAgaAQNggZBg6BB0AgaBA2CBkGDoBE0CBoE" +
+  "DYJG0CBoEDQIGgSNoEHQIGgQNAiaf4m5FivgQ4OgQdAgaAQNggZBg6BB0AgaBA2CBkGDoBE0CBoEDYKG" +
+  "qQFVpwUBmo9fcgAAAABJRU5ErkJggg==";
 const PORT = 8731;
 const MM = 72 / 25.4;           // millimetres to PDF points
 const BOTTOM_LIMIT_MM = 6;      // nothing may be drawn below this from the page foot
@@ -266,6 +273,49 @@ async function testApp(page) {
   await page.reload();
   eq("and survives a reload", await page.textContent("#medCount"), "2");
 
+  // Company logo: stored scaled down, carried into the export, drawn on the PDF.
+  await page.click('[data-tab="setup"]');
+  const logoPath = path.join(os.tmpdir(), "smoke-logo.png");
+  fs.writeFileSync(logoPath, Buffer.from(TEST_LOGO_PNG, "base64"));
+  await page.setInputFiles("#logoFile", logoPath);
+  await page.waitForFunction(() => !document.getElementById("logoPreview").hidden);
+  check("the logo previews once chosen", await page.isVisible("#logoPreview"));
+
+  const logo = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("drug-bag-tracker/v2")).docs.bag.setup;
+    return { w: s.logoW, h: s.logoH, prefix: (s.logo || "").slice(0, 14) };
+  });
+  eq("the logo keeps its shape", logo.w / logo.h, 3);
+  check("and is stored as an image", logo.prefix === "data:image/png");
+  check("within the size cap", logo.w <= 480 && logo.h <= 480,
+    logo.w + "x" + logo.h);
+
+  const withLogo = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    const d = Object.assign({}, st.docs.bag.setup,
+      { medications: st.docs.bag.medications, mode: "bag" });
+    return window.DrugBagPDF.build(d).internal.getNumberOfPages();
+  });
+  eq("the PDF still builds with a logo", withLogo, 3);
+
+  await page.reload();
+  check("the logo survives a reload", await page.isVisible("#logoPreview"));
+
+  await page.click("#logoRemove");
+  check("and can be removed", await page.isHidden("#logoPreview"));
+  check("leaving nothing stored", await page.evaluate(() =>
+    !JSON.parse(localStorage.getItem("drug-bag-tracker/v2")).docs.bag.setup.logo));
+
+  // Put it back, so the import round trip below carries it.
+  await page.setInputFiles("#logoFile", logoPath);
+  await page.waitForFunction(() => !document.getElementById("logoPreview").hidden);
+  await page.click('[data-tab="generate"]');
+  const [reExport] = await Promise.all([
+    page.waitForEvent("download"), page.click("#exportBtn")]);
+  await reExport.saveAs(savedBag);
+  check("the export carries the logo",
+    JSON.parse(fs.readFileSync(savedBag, "utf8")).setup.logo.startsWith("data:image/png"));
+
   // Import, from the setup tab, restores a document over whatever is open.
   await page.click('[data-tab="setup"]');
   check("setup offers an import", await page.isVisible("#importSetupBtn"));
@@ -280,6 +330,7 @@ async function testApp(page) {
   await page.waitForFunction(() => !document.getElementById("importResult").hidden);
   eq("import restores the bag number", await page.inputValue("#bagNumber"), "1");
   eq("import restores the medications", await page.textContent("#medCount"), "2");
+  check("import restores the logo", await page.isVisible("#logoPreview"));
   check("import says what it loaded",
     (await page.textContent("#importResult")).includes("drug bag 1 with 2 medications"),
     await page.textContent("#importResult"));
