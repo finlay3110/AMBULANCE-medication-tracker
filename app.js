@@ -25,7 +25,7 @@
   var SETUP_FIELDS = [
     "companyName", "companyPhone", "companyAddress",
     "bagNumber", "preppedBy", "checkedBy", "preppedDate", "sealNumber",
-    "safeLocation"
+    "safeLocation", "inServiceUntil"
   ];
 
   // Kept out of SETUP_FIELDS: not a text input, and set through its own control.
@@ -50,6 +50,9 @@
       preppedDate: ["Prepped date", ""],
       checkedBy: ["Checked by", "Second person for the two-person check (optional)"],
       doses: ["Number of doses", "e.g. 12"],
+      inService: ["In service until", ""],
+      inServiceHint: "Optional. Expiry is then checked up to this date, so anything running " +
+        "out while the bag is away is flagged.",
       summaryId: "Drug bag",
       addTitle: "Add medication",
       editTitle: "Edit medication"
@@ -70,6 +73,9 @@
       preppedDate: ["Register opened", ""],
       checkedBy: ["Witness", "Second person for the stock check (optional)"],
       doses: ["Quantity held", "e.g. 10"],
+      inService: ["Check expiry up to", ""],
+      inServiceHint: "Optional. Stock expiring before this date is flagged, so a review or " +
+        "restock can be planned.",
       summaryId: "CD safe",
       addTitle: "Add controlled drug",
       editTitle: "Edit controlled drug"
@@ -100,6 +106,8 @@
     relabel("preppedDate", w.preppedDate);
     relabel("checkedBy", w.checkedBy);
     relabel("mDoses", w.doses);
+    relabel("inServiceUntil", w.inService);
+    $("inServiceHint").textContent = w.inServiceHint;
 
     $("detailsTitle").textContent = w.detailsTitle;
     $("contentsTitle").textContent = w.contentsTitle;
@@ -211,10 +219,13 @@
   function readSetup() {
     var setup = doc().setup;
     var before = JSON.stringify(setup);
+    var wasInService = setup.inServiceUntil;
     SETUP_FIELDS.forEach(function (f) { setup[f] = $(f).value.trim(); });
     if (JSON.stringify(setup) !== before) touch();
     save();
-    renderSummary();
+    // The service window decides every expiry flag, so the list needs redrawing.
+    if (setup.inServiceUntil !== wasInService) renderMeds();
+    else renderSummary();
   }
 
   function fillSetup() {
@@ -466,12 +477,12 @@
       }
 
       var parsed = window.Expiry.parse(m.expiry);
-      var st = window.Expiry.status(parsed);
-      if (st === "expired" || st === "soon") {
+      var st = window.Expiry.serviceStatus(parsed, doc().setup.inServiceUntil);
+      if (st !== "ok" && st !== "unknown") {
         var chip = document.createElement("span");
-        chip.className = "chip " + (st === "expired" ? "bad" : "warn");
-        chip.textContent = st === "expired"
-          ? "EXPIRED"
+        chip.className = "chip " + (st === "soon" ? "warn" : "bad");
+        chip.textContent = st === "expired" ? "EXPIRED"
+          : st === "in-service" ? "EXPIRES IN SERVICE"
           : "Expires in " + window.Expiry.daysLeft(parsed) + "d";
         name.appendChild(chip);
       }
@@ -524,13 +535,14 @@
     var totalDoses = doc().medications.reduce(function (a, m) {
       return a + (parseInt(m.doses, 10) || 0);
     }, 0);
+    var until = doc().setup.inServiceUntil;
     var first = window.Expiry.earliest(doc().medications);
     var items = [
       [words().summaryId, doc().setup.bagNumber || "—"],
       ["Company", doc().setup.companyName || "—"],
       [isCdMode() ? "Earliest expiry" : "Bag expires",
         first ? window.Expiry.format(first.parsed) : "—",
-        first ? window.Expiry.status(first.parsed) : "unknown"],
+        first ? window.Expiry.serviceStatus(first.parsed, until) : "unknown"],
       [isCdMode() ? "Controlled drugs" : "Medications", String(doc().medications.length)],
       [isCdMode() ? "Total quantity held" : "Total logged doses", String(totalDoses)],
       ["Pages", String((isCdMode() ? 2 : 1) + doc().medications.length) + "+"]
@@ -571,24 +583,38 @@
     }
 
     var warn = $("expiryWarning");
+    var names = function (list) {
+      return list.map(function (m) { return m.name; }).join(", ");
+    };
     var expired = doc().medications.filter(function (m) {
       return window.Expiry.status(window.Expiry.parse(m.expiry)) === "expired";
     });
+    var inService = window.Expiry.expiringInService(doc().medications, until);
     var soon = doc().medications.filter(function (m) {
-      return window.Expiry.status(window.Expiry.parse(m.expiry)) === "soon";
+      return window.Expiry.serviceStatus(window.Expiry.parse(m.expiry), until) === "soon";
     });
-    if (expired.length) {
+    if (inService.length && !expired.length) {
+      warn.className = "notice bad";
+      warn.textContent = inService.length +
+        (inService.length === 1 ? " medication expires" : " medications expire") +
+        " before " + window.Expiry.format(
+          window.Expiry.parse(until), until) + ", while this " +
+        (isCdMode() ? "stock is in date" : "bag is in service") + ": " + names(inService) + ".";
+      warn.hidden = false;
+    } else if (expired.length) {
       warn.className = "notice bad";
       warn.textContent = expired.length + " medication" + (expired.length === 1 ? " is" : "s are") +
-        " already expired: " + expired.map(function (m) { return m.name; }).join(", ") +
-        ". Replace before the bag goes into service.";
+        " already expired: " + names(expired) + ". Replace before the bag goes into service." +
+        (inService.length
+          ? " A further " + inService.length + " expire before " +
+            window.Expiry.format(window.Expiry.parse(until), until) + ": " + names(inService) + "."
+          : "");
       warn.hidden = false;
     } else if (soon.length) {
       warn.className = "notice warn";
       warn.textContent = soon.length +
         (soon.length === 1 ? " medication expires within " : " medications expire within ") +
-        window.Expiry.SOON_DAYS + " days: " +
-        soon.map(function (m) { return m.name; }).join(", ") + ".";
+        window.Expiry.SOON_DAYS + " days: " + names(soon) + ".";
       warn.hidden = false;
     } else {
       warn.hidden = true;

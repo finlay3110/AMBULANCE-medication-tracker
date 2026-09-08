@@ -61,6 +61,13 @@ derived as the earliest expiry it contains and printed on the label. Anything
 already expired is flagged red, and anything within 90 days amber, both in the
 app and on the PDF.
 
+Setting an **in service until** date changes the question from "is this in date
+today?" to "will it still be in date when the bag comes back?". Expiry is then
+judged against that date, so stock that is perfectly valid now but runs out
+mid-deployment is flagged red in the app and printed in a band under the
+contents table: *EXPIRES BEFORE 31/03/2027 — 2 ITEMS*. On a CD register the same
+field reads "check expiry up to", for planning a review or restock.
+
 ### Controlled drugs
 
 Controlled drugs live in the CD safe rather than in a bag, and are signed out
@@ -125,6 +132,14 @@ strip showing presentation, dose, batch number and expiry, then one numbered
 row per dose with `DATE USED`, `PRF NO` and `SIGNED` columns to sign off in
 ink. Medications with more doses than fit on a page are split evenly across
 pages rather than leaving a stub.
+
+### Page footers
+
+Every page carries the bag or safe, the company, when the PDF was generated, and
+"Page 3 of 9". The total is only known once the document is finished, so footers
+are stamped in a final pass over every page — which also keeps them correct on
+the landscape sheets. On a printed record it makes a missing page obvious, and
+tells you which of two printouts is the current one.
 
 ## Layout
 

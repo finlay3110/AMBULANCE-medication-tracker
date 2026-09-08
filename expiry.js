@@ -110,6 +110,37 @@
     return Math.round((eff - (now || today())) / 86400000);
   }
 
+  /* Parse an ISO date from a date input, as a local midnight. */
+  function parseDay(iso) {
+    var m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    var d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  /*
+   * Status judged against a service window rather than just today: stock that
+   * is in date now but runs out before the bag comes back is the thing worth
+   * catching. "expired" is already out of date; "in-service" expires while the
+   * bag is out; "soon" is inside the 90 day window; otherwise "ok".
+   */
+  function serviceStatus(parsed, until, now) {
+    var base = status(parsed, now);
+    if (base !== "ok" && base !== "soon") return base;   // expired or unknown
+    var end = until instanceof Date ? until : parseDay(until);
+    if (end && effective(parsed) < end) return "in-service";
+    return base;
+  }
+
+  /* Items that expire before the bag is due back. */
+  function expiringInService(medications, until) {
+    var end = until instanceof Date ? until : parseDay(until);
+    if (!end) return [];
+    return (medications || []).filter(function (m) {
+      return serviceStatus(parse(m.expiry), end) === "in-service";
+    });
+  }
+
   /* Earliest expiry in the bag — this is what the bag as a whole expires on. */
   function earliest(medications) {
     var best = null;
@@ -126,6 +157,9 @@
     format: format,
     effective: effective,
     status: status,
+    serviceStatus: serviceStatus,
+    expiringInService: expiringInService,
+    parseDay: parseDay,
     daysLeft: daysLeft,
     earliest: earliest,
     today: today,

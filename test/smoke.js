@@ -60,6 +60,19 @@ function testExpiry() {
   eq("expired the next day", E.status(july, new Date(2025, 7, 1)), "expired");
   eq("flags the 90 day window", E.status(july, new Date(2025, 5, 1)), "soon");
   eq("quiet when far off", E.status(E.parse("12/2030"), new Date(2025, 5, 1)), "ok");
+  // Judged against a service window rather than today.
+  const until = "2027-03-01";
+  eq("in date now but not when the bag returns",
+    E.serviceStatus(E.parse("01/2027"), until), "in-service");
+  eq("lasts beyond the window", E.serviceStatus(E.parse("06/2027"), until), "ok");
+  eq("already expired stays expired",
+    E.serviceStatus(E.parse("01/2020"), until), "expired");
+  eq("no window falls back to today", E.serviceStatus(E.parse("01/2027"), ""), "ok");
+  eq("lists what runs out in service",
+    E.expiringInService([{ expiry: "01/2027" }, { expiry: "06/2027" }], until).length, 1);
+  eq("and nothing without a window",
+    E.expiringInService([{ expiry: "01/2027" }], "").length, 0);
+
   eq("earliest wins", E.format(E.earliest([
     { expiry: "12/2027" }, { expiry: "01/2026" }, { expiry: "06/2026" }
   ]).parsed), "01/2026");
@@ -143,6 +156,13 @@ async function testPdfs(page) {
   for (const [name, spec, expectedPages] of cases) {
     const out = await build(page, spec);
     eq(name + " — page count", out.count, expectedPages);
+
+    const firstPage = out.streams[0].join("\n");
+    const lastPage = out.streams[out.streams.length - 1].join("\n");
+    check(name + " — footers count the whole document",
+      firstPage.includes("Page 1 of " + expectedPages) &&
+      lastPage.includes("Page " + expectedPages + " of " + expectedPages));
+    check(name + " — footers are dated", firstPage.includes("Generated "));
 
     let worst = Infinity, worstPage = 0;
     out.streams.forEach((lines, i) => {
@@ -272,6 +292,35 @@ async function testApp(page) {
 
   await page.reload();
   eq("and survives a reload", await page.textContent("#medCount"), "2");
+
+  // An in service date moves the expiry question from "is it in date?" to
+  // "will it still be in date when the bag comes back?".
+  await page.click('[data-tab="setup"]');
+  const farOff = new Date();
+  farOff.setFullYear(farOff.getFullYear() + 1);
+  await page.fill("#inServiceUntil", farOff.toISOString().slice(0, 10));
+  await page.click('[data-tab="meds"]');
+  check("stock that runs out mid-service is flagged",
+    (await page.locator(".chip.bad").filter({ hasText: "EXPIRES IN SERVICE" }).count()) > 0);
+  await page.click('[data-tab="generate"]');
+  check("and called out on the generate tab",
+    (await page.textContent("#expiryWarning")).includes("while this bag is in service"),
+    await page.textContent("#expiryWarning"));
+
+  const banded = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    const d = Object.assign({}, st.docs.bag.setup,
+      { medications: st.docs.bag.medications, mode: "bag" });
+    const doc = window.DrugBagPDF.build(d);
+    return doc.internal.pages[1].join("\n").indexOf("EXPIRES BEFORE") >= 0;
+  });
+  check("and printed on the label", banded);
+
+  await page.click('[data-tab="setup"]');
+  await page.fill("#inServiceUntil", "");
+  await page.click('[data-tab="meds"]');
+  eq("clearing the date clears the flag",
+    await page.locator(".chip.bad").filter({ hasText: "EXPIRES IN SERVICE" }).count(), 0);
 
   // Company logo: stored scaled down, carried into the export, drawn on the PDF.
   await page.click('[data-tab="setup"]');
