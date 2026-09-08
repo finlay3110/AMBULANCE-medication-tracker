@@ -257,3 +257,8 @@ body.cd-mode .mode:has(input:checked) { background: #fbf2f2; }
 .med.s-S19 { border-left-color: #0f6e78; }
 .med.s-S19 .med-tag { background: #0f6e78; }
 .notice.info { background: #eef2f6; color: #35485c; border: 1px solid var(--line); }
+
+/* ---------- expiry picker ---------- */
+.expiry-row { display: flex; gap: 8px; }
+.expiry-row select { flex: 0 0 auto; width: auto; }
+.expiry-row input { flex: 1 1 auto; min-width: 0; }

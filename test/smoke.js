@@ -208,6 +208,28 @@ async function testPdfs(page) {
   }
 }
 
+/* Drive the expiry picker: "YYYY-MM" uses the month control, a full date the
+   date control. */
+async function setExpiry(page, value) {
+  const parsed = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(value);
+  if (parsed && parsed[3]) {
+    await page.selectOption("#mExpiryPrecision", "day");
+    await page.fill("#mExpiryDate", value);
+    return;
+  }
+  const month = parsed ? value.slice(0, 7) : monthFrom(value);
+  await page.selectOption("#mExpiryPrecision", "month");
+  await page.fill("#mExpiryMonth", month);
+}
+
+/* "10/2027" and "07/25" as typed on a pack, to the picker's YYYY-MM. */
+function monthFrom(value) {
+  const m = /^(\d{1,2})\/(\d{2}|\d{4})$/.exec(value);
+  if (!m) throw new Error("test helper cannot express expiry: " + value);
+  const year = m[2].length === 2 ? "20" + m[2] : m[2];
+  return year + "-" + m[1].padStart(2, "0");
+}
+
 /* ---------------- app behaviour ----------------------------------------- */
 async function testApp(page) {
   console.log("\napp behaviour");
@@ -226,7 +248,7 @@ async function testApp(page) {
     await page.fill("#mPresentation", m.presentation);
     await page.fill("#mDose", m.dose);
     await page.fill("#mBatch", m.batch);
-    await page.fill("#mExpiry", m.expiry);
+    await setExpiry(page, m.expiry);
     await page.fill("#mDoses", String(m.doses));
     await page.click("#medSubmit");
   };
@@ -247,11 +269,28 @@ async function testApp(page) {
   await page.fill("#mName", "Junk");
   await page.fill("#mPresentation", "Tablet");
   await page.fill("#mDose", "1mg");
-  await page.fill("#mExpiry", "banana");
+  await page.selectOption("#mExpiryPrecision", "month");
+  await page.fill("#mExpiryMonth", "");
   await page.fill("#mDoses", "2");
   await page.click("#medSubmit");
-  check("an unparseable expiry is refused", await page.isVisible("#medError"));
+  check("a missing expiry is refused", await page.isVisible("#medError"));
   eq("and nothing was added", await page.textContent("#medCount"), "1");
+
+  // The picker stores a month as YYYY-MM and an exact date as YYYY-MM-DD.
+  await page.selectOption("#mExpiryPrecision", "month");
+  await page.fill("#mExpiryMonth", "2027-10");
+  check("a month reads back as the month end",
+    (await page.textContent("#mExpiryEcho")).includes("10/2027"),
+    await page.textContent("#mExpiryEcho"));
+  await page.selectOption("#mExpiryPrecision", "day");
+  eq("switching precision carries the value over",
+    await page.inputValue("#mExpiryDate"), "2027-10-01");
+  await page.fill("#mExpiryDate", "2027-10-18");
+  check("an exact date reads back in full",
+    (await page.textContent("#mExpiryEcho")).includes("18/10/2027"),
+    await page.textContent("#mExpiryEcho"));
+  await page.selectOption("#mExpiryPrecision", "month");
+  eq("and back again", await page.inputValue("#mExpiryMonth"), "2027-10");
 
   // Copy sets up a second batch of the same drug.
   await page.click('.med:first-child .icon-btn:nth-child(3)');
@@ -263,7 +302,7 @@ async function testApp(page) {
   const soonExpiry = String(nextMonth.getMonth() + 1).padStart(2, "0") +
     "/" + nextMonth.getFullYear();
   await page.fill("#mBatch", "B2");
-  await page.fill("#mExpiry", soonExpiry);
+  await setExpiry(page, soonExpiry);
   await page.fill("#mDoses", "12");
   await page.click("#medSubmit");
   eq("second batch added", await page.textContent("#medCount"), "2");
@@ -365,7 +404,7 @@ async function testApp(page) {
   await page.fill("#mPresentation", "Ampoule");
   await page.fill("#mDose", "2mg/1ml");
   await page.fill("#mBatch", "OND1");
-  await page.fill("#mExpiry", "10/2027");
+  await setExpiry(page, "10/2027");
   await page.fill("#mDoses", "4");
   await page.selectOption("#mSchedule", "S19");
   await page.click("#medSubmit");

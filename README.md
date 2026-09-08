@@ -76,10 +76,17 @@ so the pages can be told apart.
 
 ### Expiry dates
 
-Expiry is typed however it is printed on the pack — `07/25`, `10/2027`,
-`Oct 2025` or `18/10/2025` — and the form confirms how it was read before the
-entry is accepted. A month-only expiry is treated as in date to the last day of
-that month, which is the pharmacy convention.
+Expiry is picked, not typed. Most packs state a month, so the field defaults to
+a month picker; switch it to **exact date** for the packs that print a full one.
+A month-only expiry is treated as in date to the last day of that month, which
+is the pharmacy convention, and the form says so as you pick. Switching between
+month and exact date carries the value over rather than clearing it.
+
+Values are stored as `YYYY-MM` or `YYYY-MM-DD`, and the parser still accepts the
+older free-text forms (`07/25`, `Oct 2025`, `18/10/2025`) so previously exported
+files and hand-edited JSON import correctly. Safari has never supported
+`<input type="month">`, so where it is missing the field falls back to a text box
+using that same parser.
 
 Because the bag is only as good as its earliest item, the **bag expiry** is
 derived as the earliest expiry it contains and printed on the label. Anything

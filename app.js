@@ -241,6 +241,72 @@
     }
   }
 
+  /* ---------------- expiry picker ---------------- */
+
+  /* Safari has never supported <input type="month">; it renders a text box. */
+  function supportsInput(type) {
+    var probe = document.createElement("input");
+    probe.setAttribute("type", type);
+    return probe.type === type;
+  }
+
+  var HAS_MONTH_INPUT = supportsInput("month");
+
+  /*
+   * Remembered separately because by the time the precision select fires its
+   * change event it already reads as the new precision, so the value that was
+   * on screen a moment ago can no longer be read back through it.
+   */
+  var lastExpiry = "";
+
+  function expiryPrecision() {
+    return $("mExpiryPrecision").value === "day" ? "day" : "month";
+  }
+
+  /* Show the control matching the chosen precision. */
+  function syncExpiryInputs() {
+    var day = expiryPrecision() === "day";
+    if (!HAS_MONTH_INPUT && !day) {
+      $("mExpiryMonth").hidden = true;
+      $("mExpiryDate").hidden = true;
+      $("mExpiryText").hidden = false;
+      return;
+    }
+    $("mExpiryText").hidden = true;
+    $("mExpiryMonth").hidden = day;
+    $("mExpiryDate").hidden = !day;
+  }
+
+  /* The canonical value: YYYY-MM for a month, YYYY-MM-DD for an exact date. */
+  function expiryValue() {
+    if (expiryPrecision() === "day") return $("mExpiryDate").value.trim();
+    return HAS_MONTH_INPUT ? $("mExpiryMonth").value.trim() : $("mExpiryText").value.trim();
+  }
+
+  function setExpiryValue(raw) {
+    var parsed = window.Expiry.parse(raw);
+    lastExpiry = parsed ? parsed.iso : "";
+    $("mExpiryMonth").value = "";
+    $("mExpiryDate").value = "";
+    $("mExpiryText").value = "";
+
+    if (!parsed) {
+      $("mExpiryPrecision").value = "month";
+      if (!HAS_MONTH_INPUT) $("mExpiryText").value = raw || "";
+      syncExpiryInputs();
+      return;
+    }
+    $("mExpiryPrecision").value = parsed.precision;
+    if (parsed.precision === "day") {
+      $("mExpiryDate").value = parsed.iso;
+    } else if (HAS_MONTH_INPUT) {
+      $("mExpiryMonth").value = parsed.iso;
+    } else {
+      $("mExpiryText").value = parsed.iso;
+    }
+    syncExpiryInputs();
+  }
+
   /* ---------------- quick add ---------------- */
 
   var quick = { items: [], active: -1, closeTimer: null };
@@ -479,7 +545,7 @@
       presentation: $("mPresentation").value.trim(),
       dose: $("mDose").value.trim(),
       batch: $("mBatch").value.trim(),
-      expiry: $("mExpiry").value.trim(),
+      expiry: expiryValue(),
       doses: parseInt($("mDoses").value, 10),
       schedule: isCdMode() ? "CD" : $("mSchedule").value,
       unit: isCdMode() ? ($("mUnit").value.trim() || "ampoules") : ""
@@ -490,7 +556,9 @@
     if (!m.name) return "Enter the medication name.";
     if (!m.presentation) return "Enter the presentation (tablet, sachet, ampoule…).";
     if (!m.dose) return "Enter the dose or strength.";
-    if (!m.expiry) return "Enter the expiry.";
+    if (!m.expiry) {
+      return expiryPrecision() === "day" ? "Pick the expiry date." : "Pick the expiry month.";
+    }
     if (!window.Expiry.parse(m.expiry)) {
       return "Expiry \u201c" + m.expiry + "\u201d was not understood. Use a month " +
         "(07/25, 10/2027, Oct 2025) or a full date (18/10/2025).";
@@ -502,9 +570,11 @@
   }
 
   function clearMedForm() {
-    ["mName", "mPresentation", "mDose", "mBatch", "mExpiry", "mDoses"].forEach(function (id) {
+    ["mName", "mPresentation", "mDose", "mBatch", "mDoses"].forEach(function (id) {
       $(id).value = "";
     });
+    $("mExpiryPrecision").value = "month";
+    setExpiryValue("");
     $("mSchedule").value = "GSL";
     $("mUnit").value = isCdMode() ? "ampoules" : "";
     $("medNote").hidden = true;
@@ -522,7 +592,7 @@
     $("mPresentation").value = m.presentation;
     $("mDose").value = m.dose;
     $("mBatch").value = m.batch;
-    $("mExpiry").value = m.expiry;
+    setExpiryValue(m.expiry);
     $("mDoses").value = m.doses;
     $("mSchedule").value = m.schedule || "GSL";
     $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
@@ -569,10 +639,14 @@
   /* Live confirmation of how the typed expiry was read. */
   function updateExpiryEcho() {
     var el = $("mExpiryEcho");
-    var raw = $("mExpiry").value.trim();
+    var raw = expiryValue();
+    if (raw) lastExpiry = raw;
     if (!raw) {
       el.className = "echo";
-      el.textContent = "Month or full date \u2014 07/25, 10/2027, 18/10/2025, Oct 2025";
+      el.textContent = expiryPrecision() === "day"
+        ? "Pick the exact date printed on the pack."
+        : "Most packs state a month, which runs to the last day of that month. " +
+          "Switch to an exact date where the pack gives one.";
       return;
     }
     var p = window.Expiry.parse(raw);
@@ -969,7 +1043,25 @@
       $("mName").focus();
     });
     $("medCancel").addEventListener("click", clearMedForm);
-    $("mExpiry").addEventListener("input", updateExpiryEcho);
+    ["mExpiryMonth", "mExpiryDate", "mExpiryText"].forEach(function (id) {
+      $(id).addEventListener("input", updateExpiryEcho);
+      $(id).addEventListener("change", updateExpiryEcho);
+    });
+    $("mExpiryPrecision").addEventListener("change", function () {
+      // Carry the value across so switching precision does not lose the entry.
+      syncExpiryInputs();
+      if (!expiryValue() && lastExpiry) {
+        var p = window.Expiry.parse(lastExpiry);
+        if (p && expiryPrecision() === "day") {
+          $("mExpiryDate").value = p.precision === "day" ? p.iso : p.iso + "-01";
+        } else if (p) {
+          var monthIso = p.iso.slice(0, 7);
+          if (HAS_MONTH_INPUT) $("mExpiryMonth").value = monthIso;
+          else $("mExpiryText").value = monthIso;
+        }
+      }
+      updateExpiryEcho();
+    });
     $("mSchedule").addEventListener("change", function () {
       // Controlled drugs default to the register layout; still overridable.
       if (this.value === "CD") $("mCdLog").checked = true;

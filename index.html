@@ -179,11 +179,21 @@
             <span>Batch number</span>
             <input type="text" id="mBatch" placeholder="e.g. X2257R">
           </label>
-          <label class="field">
+          <div class="field" id="f-mExpiry">
             <span>Expiry <b>*</b></span>
-            <input type="text" id="mExpiry" placeholder="e.g. 07/25, 10/2027 or 18/10/2025" autocomplete="off">
-            <small class="echo" id="mExpiryEcho">Month or full date &mdash; 07/25, 10/2027, 18/10/2025, Oct 2025</small>
-          </label>
+            <div class="expiry-row">
+              <select id="mExpiryPrecision" aria-label="Expiry precision">
+                <option value="month">Month</option>
+                <option value="day">Exact date</option>
+              </select>
+              <input type="month" id="mExpiryMonth" aria-label="Expiry month">
+              <input type="date" id="mExpiryDate" aria-label="Expiry date" hidden>
+              <input type="text" id="mExpiryText" hidden autocomplete="off"
+                     placeholder="e.g. 07/25, 10/2027 or 18/10/2025">
+            </div>
+            <small class="echo" id="mExpiryEcho">Most packs state a month, which runs to the last
+              day of that month. Switch to an exact date where the pack gives one.</small>
+          </div>
           <label class="field" id="f-mDoses">
             <span>Number of doses <b>*</b></span>
             <input type="number" id="mDoses" min="1" max="200" step="1" placeholder="e.g. 12">
