@@ -92,7 +92,10 @@ rest.
 Browser storage is not a backup — clearing site data, or using a private window,
 loses it. The generate tab says so until a document has been exported, warns
 again once it has changed since that export, and says it plainly before
-clearing.
+clearing. Downloading the PDF prompts for the JSON as well, with a button to do
+it there and then: the PDF is the printable record but it cannot be read back
+in, so the JSON is the only thing that saves retyping the document to produce
+the next version.
 
 ## What the PDF contains
 

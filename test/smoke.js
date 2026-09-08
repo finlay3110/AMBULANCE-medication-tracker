@@ -196,8 +196,13 @@ async function testApp(page) {
   await page.click('.med:first-child .icon-btn:nth-child(3)');
   eq("copy prefills the name", await page.inputValue("#mName"), "Paracetamol");
   eq("copy clears the batch", await page.inputValue("#mBatch"), "");
+  const nextMonth = new Date();
+  nextMonth.setDate(1);
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  const soonExpiry = String(nextMonth.getMonth() + 1).padStart(2, "0") +
+    "/" + nextMonth.getFullYear();
   await page.fill("#mBatch", "B2");
-  await page.fill("#mExpiry", "11/2027");
+  await page.fill("#mExpiry", soonExpiry);
   await page.fill("#mDoses", "12");
   await page.click("#medSubmit");
   eq("second batch added", await page.textContent("#medCount"), "2");
@@ -206,15 +211,31 @@ async function testApp(page) {
 
   await page.click('[data-tab="generate"]');
   check("an un-exported document is flagged", await page.isVisible("#backupWarning"));
+  check("the near expiry is flagged, and agrees in number",
+    (await page.textContent("#expiryWarning")).startsWith("1 medication expires within"),
+    await page.textContent("#expiryWarning"));
 
-  const [bagFile] = await Promise.all([page.waitForEvent("download"), page.click("#exportBtn")]);
+  check("no reminder before a PDF is downloaded", await page.isHidden("#pdfReminder"));
+  const [pdfFile] = await Promise.all([page.waitForEvent("download"), page.click("#generateBtn")]);
+  eq("PDF is named for the bag", pdfFile.suggestedFilename(), "Drug-Bag-1.pdf");
+  check("downloading the PDF asks for the json too", await page.isVisible("#pdfReminder"));
+  check("and offers to do it there and then",
+    await page.isVisible("#pdfReminderExport"));
+
+  const [bagFile] = await Promise.all([
+    page.waitForEvent("download"), page.click("#pdfReminderExport")]);
   eq("bag export is named for the bag", bagFile.suggestedFilename(), "Drug-Bag-1-saved.json");
   check("the flag clears once exported", await page.isHidden("#backupWarning"));
+  check("the reminder settles once both are saved",
+    (await page.getAttribute("#pdfReminder", "class")).includes("good"));
+  check("with nothing left to press", await page.isHidden("#pdfReminderExport"));
 
   // Switch to the CD register: separate document, separate list.
   await page.click('[data-tab="setup"]');
   await page.check('input[name=docMode][value=cd]');
   eq("the CD register starts empty", await page.textContent("#medCount"), "0");
+  check("the reminder does not follow you to the other document",
+    await page.isHidden("#pdfReminder"));
   check("seal number is bag only", await page.locator("#f-sealNumber").isHidden());
   check("safe location is CD only", await page.locator("#f-safeLocation").isVisible());
   await page.fill("#companyName", "Test Medical Ltd");

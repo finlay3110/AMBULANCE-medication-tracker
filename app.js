@@ -117,6 +117,7 @@
     if (mode === state.mode) return;
     readSetup();
     state.mode = mode;
+    hidePdfReminder();
     clearMedForm();
     fillSetup();
     applyMode();
@@ -455,6 +456,8 @@
       box.appendChild(d);
     });
 
+    if (!$("pdfReminder").hidden) showPdfReminder();
+
     var backup = $("backupWarning");
     if (needsBackup()) {
       var never = !(doc().meta || {}).exportedAt;
@@ -484,13 +487,39 @@
       warn.hidden = false;
     } else if (soon.length) {
       warn.className = "notice warn";
-      warn.textContent = soon.length + " medication" + (soon.length === 1 ? "" : "s") +
-        " expire within " + window.Expiry.SOON_DAYS + " days: " +
+      warn.textContent = soon.length +
+        (soon.length === 1 ? " medication expires within " : " medications expire within ") +
+        window.Expiry.SOON_DAYS + " days: " +
         soon.map(function (m) { return m.name; }).join(", ") + ".";
       warn.hidden = false;
     } else {
       warn.hidden = true;
     }
+  }
+
+  /*
+   * Shown after a PDF download. The PDF cannot be read back into the tool, so
+   * the JSON is the only thing that saves retyping the whole document later.
+   */
+  function showPdfReminder() {
+    var box = $("pdfReminder");
+    var text = $("pdfReminderText");
+    var what = isCdMode() ? "register" : "bag";
+    if (needsBackup()) {
+      box.className = "notice warn reminder";
+      text.textContent = "PDF downloaded. Save the .json copy too \u2014 a PDF cannot be loaded " +
+        "back in, so without it you would have to retype this " + what + " to make the next version.";
+      $("pdfReminderExport").hidden = false;
+    } else {
+      box.className = "notice good reminder";
+      text.textContent = "PDF downloaded, and your .json copy of this " + what + " is up to date.";
+      $("pdfReminderExport").hidden = true;
+    }
+    box.hidden = false;
+  }
+
+  function hidePdfReminder() {
+    $("pdfReminder").hidden = true;
   }
 
   /* ---------------- generate ---------------- */
@@ -632,10 +661,18 @@
     });
 
     $("generateBtn").addEventListener("click", function () {
-      withData(function (d) { window.DrugBagPDF.save(d); });
+      withData(function (d) { window.DrugBagPDF.save(d); showPdfReminder(); });
     });
     $("generateTop").addEventListener("click", function () {
-      withData(function (d) { window.DrugBagPDF.save(d); });
+      withData(function (d) {
+        window.DrugBagPDF.save(d);
+        showTab("generate");
+        showPdfReminder();
+      });
+    });
+    $("pdfReminderExport").addEventListener("click", function () {
+      exportBag();
+      showPdfReminder();
     });
     $("previewBtn").addEventListener("click", function () {
       withData(function (d) { window.DrugBagPDF.open(d); });
