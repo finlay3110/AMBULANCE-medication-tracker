@@ -141,6 +141,19 @@
   <!-- ============ MEDICATIONS ============ -->
   <section class="panel" id="panel-meds" role="tabpanel">
     <div class="card">
+      <h2>Quick add</h2>
+      <p class="hint">Search the list to fill the form, then add the batch, expiry and quantity.
+        The suggested legal category is a starting point to save typing &mdash; check it against
+        your own policy and current legislation before the document is used.</p>
+      <div class="quick">
+        <input type="search" id="quickAdd" autocomplete="off" role="combobox"
+               aria-expanded="false" aria-controls="quickResults"
+               placeholder="Search by name, formulation or strength&hellip;">
+        <ul class="quick-results" id="quickResults" role="listbox" hidden></ul>
+      </div>
+    </div>
+
+    <div class="card">
       <h2 id="medFormTitle">Add medication</h2>
       <form id="medForm" novalidate>
         <div class="grid">
@@ -191,10 +204,12 @@
               <option value="GSL">GSL — General sales list</option>
               <option value="P">P — Pharmacy only</option>
               <option value="POM">POM — Prescription only</option>
-              <option value="S17">S17 — Exemption (e.g. naloxone)</option>
+              <option value="S17">S17 — Paramedic exemption (HMR Sch 17)</option>
+              <option value="S19">S19 — Emergency parenteral (HMR Sch 19)</option>
             </select>
           </label>
         </div>
+        <p class="notice info" id="medNote" hidden></p>
         <p class="error" id="medError" hidden></p>
         <div class="actions">
           <button type="submit" class="btn primary" id="medSubmit">Add medication</button>
@@ -252,6 +267,7 @@
 
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="expiry.js"></script>
+<script src="medicines.js"></script>
 <script src="pdf.js"></script>
 <script src="app.js"></script>
 </body>

@@ -131,6 +131,8 @@
     state.mode = mode;
     hidePdfReminder();
     $("importResult").hidden = true;
+    $("quickAdd").value = "";
+    closeQuick();
     clearMedForm();
     fillSetup();
     applyMode();
@@ -237,6 +239,147 @@
       $("preppedDate").value = new Date().toISOString().slice(0, 10);
       setup.preppedDate = $("preppedDate").value;
     }
+  }
+
+  /* ---------------- quick add ---------------- */
+
+  var quick = { items: [], active: -1, closeTimer: null };
+
+  /* Blur closes the list after a beat so a click can land; typing again must
+     cancel that, or freshly rendered results get hidden underneath you. */
+  function cancelQuickClose() {
+    if (quick.closeTimer) {
+      clearTimeout(quick.closeTimer);
+      quick.closeTimer = null;
+    }
+  }
+
+  function closeQuick() {
+    cancelQuickClose();
+    quick.items = [];
+    quick.active = -1;
+    $("quickResults").hidden = true;
+    $("quickAdd").setAttribute("aria-expanded", "false");
+  }
+
+  /* Fill the form from a catalogue entry; everything stays editable after. */
+  function applyCatalogue(entry, keepStrength) {
+    clearMedForm();
+    $("mName").value = entry.name;
+    if (keepStrength) {
+      $("mPresentation").value = entry.form;
+      $("mDose").value = entry.strength;
+    }
+    if (!isCdMode() && entry.schedule && entry.schedule !== "CD") {
+      $("mSchedule").value = entry.schedule;
+    }
+    $("quickAdd").value = "";
+    closeQuick();
+    logQuickNote(entry, keepStrength);
+    ($(keepStrength ? "mBatch" : "mPresentation")).focus();
+  }
+
+  function logQuickNote(entry, keepStrength) {
+    var box = $("medNote");
+    var text = keepStrength
+      ? (entry.note || "")
+      : "Enter the formulation and strength you hold for " + entry.name + ".";
+    box.textContent = text;
+    box.hidden = !text;
+  }
+
+  function optionRow(label, meta, tag, onPick, extraClass) {
+    var li = document.createElement("li");
+    if (extraClass) li.className = extraClass;
+    li.setAttribute("role", "option");
+    var main = document.createElement("div");
+    main.className = "q-main";
+    var name = document.createElement("div");
+    name.className = "q-name";
+    name.textContent = label;
+    main.appendChild(name);
+    if (meta) {
+      var m = document.createElement("div");
+      m.className = "q-meta";
+      m.textContent = meta;
+      main.appendChild(m);
+    }
+    li.appendChild(main);
+    if (tag) {
+      var t = document.createElement("span");
+      t.className = "q-tag " + tag;
+      t.textContent = tag;
+      li.appendChild(t);
+    }
+    if (onPick) {
+      // mousedown only holds focus in the search box; the row acts on click, so
+      // it is still in the document when the click lands.
+      li.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+      li.addEventListener("click", onPick);
+      quick.items.push(onPick);
+    }
+    return li;
+  }
+
+  function renderQuick() {
+    cancelQuickClose();
+    var query = $("quickAdd").value.trim();
+    var list = $("quickResults");
+    list.textContent = "";
+    quick.items = [];
+    quick.active = -1;
+
+    if (!query) { closeQuick(); return; }
+
+    var matches = window.Medicines.search(query, { cd: isCdMode() }).slice(0, 8);
+    matches.forEach(function (entry) {
+      list.appendChild(optionRow(entry.name, entry.form + "  ·  " + entry.strength,
+        isCdMode() ? "CD" : entry.schedule,
+        function () { applyCatalogue(entry, true); }));
+    });
+
+    // Another strength or formulation of something already matched.
+    window.Medicines.matchingNames(query, { cd: isCdMode() }).slice(0, 3).forEach(function (entry) {
+      list.appendChild(optionRow(entry.name + " \u2014 other strength or formulation",
+        "Fills the name, then you type the formulation and strength you hold",
+        isCdMode() ? "CD" : entry.schedule,
+        function () { applyCatalogue(entry, false); }));
+    });
+
+    // Controlled drugs belong on the register, so say where they went.
+    if (!isCdMode()) {
+      var cds = window.Medicines.matchingControlled(query);
+      if (cds.length) {
+        list.appendChild(optionRow(
+          cds.map(function (m) { return m.name; }).filter(function (n, i, a) {
+            return a.indexOf(n) === i;
+          }).join(", ") + ": controlled drug",
+          "Held in the CD safe, not in a drug bag. Switch the document type on the setup " +
+          "tab to record it.", "", null, "note"));
+      }
+    }
+
+    list.appendChild(optionRow("Not on the list \u2014 enter it manually",
+      "Type the medication into the form below", "", function () {
+        $("quickAdd").value = "";
+        closeQuick();
+        clearMedForm();
+        $("mName").focus();
+      }, "manual"));
+
+    list.hidden = false;
+    $("quickAdd").setAttribute("aria-expanded", "true");
+  }
+
+  function moveQuick(delta) {
+    var rows = $("quickResults").querySelectorAll("li[role=option]");
+    var pickable = [];
+    rows.forEach(function (r) { if (!r.classList.contains("note")) pickable.push(r); });
+    if (!pickable.length) return;
+    pickable.forEach(function (r) { r.classList.remove("active"); });
+    quick.active = (quick.active + delta + pickable.length) % pickable.length;
+    pickable[quick.active].classList.add("active");
+    pickable[quick.active].scrollIntoView({ block: "nearest" });
   }
 
   /* ---------------- company logo ---------------- */
@@ -364,6 +507,7 @@
     });
     $("mSchedule").value = "GSL";
     $("mUnit").value = isCdMode() ? "ampoules" : "";
+    $("medNote").hidden = true;
     updateExpiryEcho();
     state.editing = null;
     $("medFormTitle").textContent = words().addTitle;
@@ -850,6 +994,23 @@
     });
 
     $("exportBtn").addEventListener("click", exportBag);
+    $("quickAdd").addEventListener("input", renderQuick);
+    $("quickAdd").addEventListener("focus", renderQuick);
+    $("quickAdd").addEventListener("blur", function () {
+      cancelQuickClose();
+      quick.closeTimer = setTimeout(closeQuick, 120);
+    });
+    $("quickAdd").addEventListener("keydown", function (ev) {
+      if (ev.key === "ArrowDown") { ev.preventDefault(); moveQuick(1); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); moveQuick(-1); }
+      else if (ev.key === "Escape") { closeQuick(); }
+      else if (ev.key === "Enter") {
+        ev.preventDefault();
+        if (quick.active >= 0 && quick.items[quick.active]) quick.items[quick.active]();
+        else if (quick.items.length) quick.items[0]();
+      }
+    });
+
     $("logoBtn").addEventListener("click", function () { $("logoFile").click(); });
     $("logoFile").addEventListener("change", function () {
       if (this.files && this.files[0]) readLogo(this.files[0]);

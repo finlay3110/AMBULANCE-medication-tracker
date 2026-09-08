@@ -78,6 +78,38 @@ function testExpiry() {
   ]).parsed), "01/2026");
 }
 
+/* ---------------- the quick-add catalogue ------------------------------- */
+function testCatalogue() {
+  console.log("\ncatalogue");
+  const sandbox = {};
+  new Function("window", fs.readFileSync(path.join(ROOT, "medicines.js"), "utf8"))(sandbox);
+  const M = sandbox.Medicines;
+
+  const raw = fs.readFileSync(path.join(ROOT, "medicines.js"), "utf8");
+  check("carries no trust or service names", !/\bLAS\b/.test(raw));
+
+  check("every entry is complete", M.CATALOGUE.every(m =>
+    m.name && m.form && m.strength && m.schedule));
+  check("categories are ones the form offers", M.CATALOGUE.every(m =>
+    ["GSL", "P", "POM", "S17", "S19", "CD"].indexOf(m.schedule) >= 0));
+  check("controlled drugs are marked as such", M.CATALOGUE.every(m =>
+    (m.schedule === "CD") === !!m.cd));
+
+  eq("searches by name", M.search("adenosine", {}).length, 1);
+  eq("matches across fields", M.search("naloxone 2mg", {}).length, 2);
+  eq("matches an abbreviated word", M.search("parac susp", {}).length, 2);
+  eq("finds nothing for nonsense", M.search("zzzz", {}).length, 0);
+
+  eq("a drug bag is offered no controlled drugs",
+    M.search("morphine", { cd: false }).length, 0);
+  check("but the register is", M.search("morphine", { cd: true }).length > 0);
+  check("and they can be pointed at", M.matchingControlled("midazolam").length > 0);
+
+  eq("distinct names for the other-strength option",
+    M.matchingNames("paracetamol", { cd: false }).filter(m =>
+      m.name === "Paracetamol suspension").length, 1);
+}
+
 /* ---------------- PDF geometry, read out of the content stream ----------- */
 /*
  * jsPDF writes each page as a content stream we can read back before saving.
@@ -293,6 +325,54 @@ async function testApp(page) {
   await page.reload();
   eq("and survives a reload", await page.textContent("#medCount"), "2");
 
+  // Quick add fills the form from the catalogue.
+  await page.click('[data-tab="meds"]');
+  await page.fill("#quickAdd", "ondansetron");
+  await page.waitForSelector("#quickResults li");
+  await page.click("#quickResults li:first-child");
+  eq("quick add fills the name", await page.inputValue("#mName"), "Ondansetron");
+  eq("and the formulation", await page.inputValue("#mPresentation"),
+    "Ampoule - solution for injection");
+  eq("and the strength", await page.inputValue("#mDose"), "2mg/1ml");
+  eq("and suggests a category", await page.inputValue("#mSchedule"), "S17");
+
+  // The other-strength option leaves formulation and strength to be typed.
+  await page.fill("#quickAdd", "paracetamol suspension");
+  await page.waitForSelector("#quickResults li");
+  const other = page.locator("#quickResults li", { hasText: "other strength" }).first();
+  await other.click();
+  eq("other strength keeps the name", await page.inputValue("#mName"),
+    "Paracetamol suspension");
+  eq("but clears the strength", await page.inputValue("#mDose"), "");
+  check("and says what to do next", await page.isVisible("#medNote"));
+
+  // A controlled drug is not offered on a drug bag, but is explained.
+  await page.fill("#quickAdd", "morphine");
+  await page.waitForSelector("#quickResults li");
+  check("no controlled drug is offered to a bag",
+    (await page.locator("#quickResults li .q-tag.CD").count()) === 0);
+  check("and the register is pointed at",
+    (await page.locator("#quickResults li.note").count()) === 1);
+
+  // Manual entry is always available.
+  await page.fill("#quickAdd", "something not stocked");
+  await page.waitForSelector("#quickResults li.manual");
+  await page.click("#quickResults li.manual");
+  eq("manual entry clears the form", await page.inputValue("#mName"), "");
+  eq("and closes the results", await page.locator("#quickResults").isHidden(), true);
+
+  await page.fill("#mName", "Ondansetron");
+  await page.fill("#mPresentation", "Ampoule");
+  await page.fill("#mDose", "2mg/1ml");
+  await page.fill("#mBatch", "OND1");
+  await page.fill("#mExpiry", "10/2027");
+  await page.fill("#mDoses", "4");
+  await page.selectOption("#mSchedule", "S19");
+  await page.click("#medSubmit");
+  eq("S19 is a category the form accepts", await page.textContent("#medCount"), "3");
+  await page.click(".med:last-child .icon-btn.del");
+  eq("tidied away again", await page.textContent("#medCount"), "2");
+
   // An in service date moves the expiry question from "is it in date?" to
   // "will it still be in date when the bag comes back?".
   await page.click('[data-tab="setup"]');
@@ -445,6 +525,7 @@ function serve() {
 
 (async () => {
   testExpiry();
+  testCatalogue();
 
   const server = await serve();
   const browser = await chromium.launch(

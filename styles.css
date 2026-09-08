@@ -222,3 +222,38 @@ body.cd-mode .mode:has(input:checked) { background: #fbf2f2; }
   background: #fff; border: 1px solid var(--line); border-radius: 8px;
 }
 .logo-preview img { max-width: 100%; max-height: 100%; display: block; }
+
+/* ---------- quick add ---------- */
+.quick { position: relative; }
+.quick input[type="search"] { font-size: 15px; padding: 11px 13px; }
+.quick-results {
+  list-style: none; margin: 6px 0 0; padding: 4px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff;
+  max-height: 340px; overflow-y: auto;
+}
+.quick-results li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 7px; cursor: pointer;
+}
+.quick-results li:hover, .quick-results li.active { background: #eef2f6; }
+.quick-results li.manual { border-top: 1px solid var(--line); border-radius: 0 0 7px 7px; }
+.quick-results li.note { cursor: default; color: #8a5d00; background: #fdf3dd; display: block; }
+.quick-results li.note:hover { background: #fdf3dd; }
+.q-main { flex: 1; min-width: 0; }
+.q-name { font-weight: 600; }
+.q-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.q-tag {
+  flex: none; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 700; color: #fff; background: #6a7683;
+}
+.q-tag.GSL { background: #4f8f3c; }
+.q-tag.P   { background: #9a6a00; }
+.q-tag.POM { background: #4a5a6a; }
+.q-tag.S17 { background: #14459e; }
+.q-tag.S19 { background: #0f6e78; }
+.q-tag.CD  { background: #8b1a1a; }
+
+/* S19 and the neutral note share the same footing as the other categories. */
+.med.s-S19 { border-left-color: #0f6e78; }
+.med.s-S19 .med-tag { background: #0f6e78; }
+.notice.info { background: #eef2f6; color: #35485c; border: 1px solid var(--line); }

@@ -39,6 +39,31 @@ edge before being stored, kept with that document, and included when the
 document is exported. An image that will not fit in storage is refused with a
 reason, and a logo that cannot be drawn is skipped rather than stopping the PDF.
 
+### Quick add
+
+The medications tab has a search box over a built-in catalogue of common
+pre-hospital medicines. Searching matches on name, formulation and strength
+together, so "nalox 2mg" or "parac susp" find what you meant. Picking an entry
+fills the name, formulation, strength and a suggested legal category, leaving
+you the batch, expiry and quantity. Every field stays editable afterwards.
+
+Two escape hatches are always offered: **other strength or formulation** of a
+matched medicine, which fills the name and leaves the rest to you, and **not on
+the list**, which clears the form for a manual entry. Nothing in the catalogue
+is a constraint.
+
+The categories used are `GSL`, `P`, `POM`, `S17` (paramedic exemption, Human
+Medicines Regulations 2012 Schedule 17), `S19` (parenteral administration in an
+emergency, Schedule 19) and `CD`. **The suggested category is a starting point
+to save typing, not a legal determination** — several medicines sit in more than
+one category depending on indication, route and pack size, and the list changes
+as legislation is amended. Check it against your own policy before a document is
+used.
+
+Controlled drugs in the catalogue are offered only on a CD register. Searching
+for one on a drug bag says so and points at the other document rather than
+letting it be added.
+
 ### Batches
 
 Each batch is held as its own entry, so a drug held in two batches is added
@@ -153,6 +178,7 @@ Designed for desktop, with a single-column responsive layout for phones.
 | `styles.css` | Styling, including the mobile layout |
 | `app.js` | Form state, validation, storage, import/export |
 | `expiry.js` | Expiry parsing and expired / expiring-soon status |
+| `medicines.js` | Quick-add catalogue and its search |
 | `pdf.js` | A4 PDF generation (label page + usage logs) |
 | `test/smoke.js` | Smoke test: expiry parser, app flow, PDF page counts and margins |
 | `vendor/jspdf.umd.min.js` | Bundled jsPDF build (MIT, see `vendor/jspdf-LICENSE.txt`) |
