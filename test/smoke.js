@@ -10,6 +10,7 @@
 
 const http = require("http");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { chromium } = require("playwright");
 
@@ -152,6 +153,7 @@ async function testPdfs(page) {
 async function testApp(page) {
   console.log("\napp behaviour");
   const errors = [];
+  page.on("dialog", d => d.accept());
   page.on("pageerror", e => errors.push(e.message));
   page.on("console", m => {
     if (m.type() === "error" && !m.text().includes("favicon")) errors.push(m.text());
@@ -225,6 +227,8 @@ async function testApp(page) {
   const [bagFile] = await Promise.all([
     page.waitForEvent("download"), page.click("#pdfReminderExport")]);
   eq("bag export is named for the bag", bagFile.suggestedFilename(), "Drug-Bag-1-saved.json");
+  const savedBag = path.join(os.tmpdir(), "smoke-bag.json");
+  await bagFile.saveAs(savedBag);
   check("the flag clears once exported", await page.isHidden("#backupWarning"));
   check("the reminder settles once both are saved",
     (await page.getAttribute("#pdfReminder", "class")).includes("good"));
@@ -261,6 +265,61 @@ async function testApp(page) {
 
   await page.reload();
   eq("and survives a reload", await page.textContent("#medCount"), "2");
+
+  // Import, from the setup tab, restores a document over whatever is open.
+  await page.click('[data-tab="setup"]');
+  check("setup offers an import", await page.isVisible("#importSetupBtn"));
+
+  await page.fill("#bagNumber", "99");
+  await page.click('[data-tab="meds"]');
+  await page.click(".med:first-child .icon-btn.del");
+  eq("document altered before importing", await page.textContent("#medCount"), "1");
+
+  await page.click('[data-tab="setup"]');
+  await page.setInputFiles("#importFile", savedBag);
+  await page.waitForFunction(() => !document.getElementById("importResult").hidden);
+  eq("import restores the bag number", await page.inputValue("#bagNumber"), "1");
+  eq("import restores the medications", await page.textContent("#medCount"), "2");
+  check("import says what it loaded",
+    (await page.textContent("#importResult")).includes("drug bag 1 with 2 medications"),
+    await page.textContent("#importResult"));
+  check("an imported document counts as saved", await page.isHidden("#backupWarning"));
+
+  // Importing a CD register from the bag tab switches document type with it.
+  const savedCd = path.join(os.tmpdir(), "smoke-cd.json");
+  fs.writeFileSync(savedCd, JSON.stringify({
+    mode: "cd", setup: { bagNumber: "7", companyName: "Test Medical Ltd",
+      companyPhone: "01", preppedBy: "A. Jones" },
+    medications: [{ name: "Morphine sulfate", presentation: "Ampoule", dose: "10mg/1ml",
+      batch: "M9", expiry: "12/2027", doses: 4, schedule: "CD", unit: "ampoules" }]
+  }));
+  await page.setInputFiles("#importFile", savedCd);
+  await page.waitForFunction(() =>
+    document.getElementById("importResult").textContent.indexOf("CD safe") >= 0);
+  check("importing a register switches document type",
+    await page.locator("#f-safeLocation").isVisible());
+  eq("and loads its stock", await page.textContent("#medCount"), "1");
+
+  // A file that is not one of ours must not wipe what is open.
+  const junk = path.join(os.tmpdir(), "smoke-junk.json");
+  fs.writeFileSync(junk, JSON.stringify({ hello: "world" }));
+  await page.setInputFiles("#importFile", junk);
+  await page.waitForFunction(() =>
+    document.getElementById("importResult").className.indexOf("bad") >= 0);
+  eq("a foreign json is refused", await page.textContent("#medCount"), "1");
+  eq("leaving the open document alone", await page.inputValue("#bagNumber"), "7");
+
+  const broken = path.join(os.tmpdir(), "smoke-broken.json");
+  fs.writeFileSync(broken, "{ not json at all");
+  await page.setInputFiles("#importFile", broken);
+  await page.waitForFunction(() =>
+    document.getElementById("importResult").textContent.indexOf("not a valid") >= 0);
+  eq("malformed json is refused too", await page.textContent("#medCount"), "1");
+
+  // The bag is still there, untouched by all of that.
+  await page.check('input[name=docMode][value=bag]');
+  eq("the bag came through unharmed", await page.inputValue("#bagNumber"), "1");
+  eq("with its medications", await page.textContent("#medCount"), "2");
 
   check("no page errors", errors.length === 0, errors.join("; "));
 }

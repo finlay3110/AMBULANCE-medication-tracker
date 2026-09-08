@@ -118,6 +118,7 @@
     readSetup();
     state.mode = mode;
     hidePdfReminder();
+    $("importResult").hidden = true;
     clearMedForm();
     fillSetup();
     applyMode();
@@ -594,24 +595,68 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
+  function importMessage(kind, text) {
+    var box = $("importResult");
+    box.className = "notice " + kind;
+    box.textContent = text;
+    box.hidden = false;
+  }
+
+  /* A saved document has a medications list, a setup block, or both. */
+  function looksLikeSavedDocument(parsed) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+    return Array.isArray(parsed.medications) ||
+      (parsed.setup && typeof parsed.setup === "object");
+  }
+
+  /* Replacing the open document, so check there is nothing unsaved first. */
+  function beginImport() {
+    if (needsBackup()) {
+      var what = isCdMode() ? "CD register" : "drug bag";
+      if (!confirm("Importing replaces the " + what + " you have open, and it has changes that " +
+                   "have not been exported.\n\nImport anyway?")) return;
+    }
+    $("importFile").click();
+  }
+
   function importBag(file) {
     var reader = new FileReader();
+    reader.onerror = function () {
+      importMessage("bad", "That file could not be read.");
+    };
     reader.onload = function () {
+      var parsed;
       try {
-        var parsed = JSON.parse(reader.result);
-        if (parsed.mode === "cd" || parsed.mode === "bag") state.mode = parsed.mode;
-        doc().setup = parsed.setup || {};
-        doc().medications = Array.isArray(parsed.medications) ? parsed.medications : [];
-        doc().meta = { exportedAt: Date.now() };
-        applyMode();
-        fillSetup();
-        clearMedForm();
-        renderMeds();
-        save();
-        showTab("setup");
+        parsed = JSON.parse(reader.result);
       } catch (e) {
-        alert("That file could not be read as a saved bag.");
+        importMessage("bad", "\u201c" + file.name + "\u201d is not a valid .json file. " +
+          "Nothing has been changed.");
+        return;
       }
+      if (!looksLikeSavedDocument(parsed)) {
+        importMessage("bad", "\u201c" + file.name + "\u201d is not a bag or register exported " +
+          "from this tool. Nothing has been changed.");
+        return;
+      }
+
+      if (parsed.mode === "cd" || parsed.mode === "bag") state.mode = parsed.mode;
+      doc().setup = parsed.setup || {};
+      doc().medications = Array.isArray(parsed.medications) ? parsed.medications : [];
+      doc().meta = { exportedAt: Date.now() };
+      applyMode();
+      fillSetup();
+      clearMedForm();
+      hidePdfReminder();
+      renderMeds();
+      save();
+      showTab("setup");
+
+      var n = doc().medications.length;
+      importMessage("good", "Loaded " + (isCdMode() ? "CD safe " : "drug bag ") +
+        (doc().setup.bagNumber || "\u2014") + " with " + n +
+        (isCdMode()
+          ? " controlled drug" + (n === 1 ? "" : "s")
+          : " medication" + (n === 1 ? "" : "s")) + ".");
     };
     reader.readAsText(file);
   }
@@ -679,7 +724,8 @@
     });
 
     $("exportBtn").addEventListener("click", exportBag);
-    $("importBtn").addEventListener("click", function () { $("importFile").click(); });
+    $("importBtn").addEventListener("click", beginImport);
+    $("importSetupBtn").addEventListener("click", beginImport);
     $("importFile").addEventListener("change", function () {
       if (this.files && this.files[0]) importBag(this.files[0]);
       this.value = "";

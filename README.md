@@ -19,7 +19,8 @@ The PDF is built with [jsPDF](https://github.com/parallax/jsPDF), bundled in
 Open `index.html` in a browser (double-click it, or serve the folder with any
 static host). There are three tabs:
 
-1. **Setup** — the document type, then company details and the details of the
+1. **Setup** — the document type, an import button to start from a bag or
+   register saved earlier, then company details and the details of the
    bag or safe. A drug bag takes a bag number, who prepped and checked it, the
    prepped date and an optional seal number; a CD safe takes a safe reference,
    its location, the accountable officer and a witness.
@@ -80,9 +81,11 @@ a drug bag at all — `CD` is not offered as a bag schedule.
 Both documents are kept in `localStorage` on that device, so part-finished work
 survives a page reload and switching document type never disturbs the other one.
 Either can be exported to JSON and re-imported later, which is the quickest way
-to prep a repeat bag — export it once as a template, then re-import and update
-the batch numbers and expiries. An import returns to the document type it was
-exported from. Exports are named after the bag or safe number, so bag 1 saves as
+to prep a repeat bag — export it once as a template, then import it from the
+setup tab and update the batch numbers and expiries. An import switches to the
+document type the file was exported from, says what it loaded, and refuses a
+file that is not one of ours rather than wiping what is open. Importing over a
+document with unexported changes asks first. Exports are named after the bag or safe number, so bag 1 saves as
 `Drug-Bag-1-saved.json` and safe 2 as `CD-Register-2-saved.json`.
 
 A bag saved by an earlier version that contained controlled drugs is migrated on
