@@ -1,2 +1,4 @@
 node_modules/
 package-lock.json
+docs/build/
+Drug-Bag-Tracker-User-Guide.pdf

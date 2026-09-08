@@ -229,8 +229,26 @@ Screen only — the generated PDF is a printed document and stays light.
 | `pdf.js` | A4 PDF generation (label page + usage logs) |
 | `DISCLAIMER.md` | Disclaimer, legal-category caveats and sources |
 | `LICENSE` | MIT licence |
+| `docs/build-guide.js` | Builds the user guide PDF from the live app |
+| `docs/user-guide.html` | The guide's text and layout |
 | `test/smoke.js` | Smoke test: expiry parser, app flow, PDF page counts and margins |
 | `vendor/jspdf.umd.min.js` | Bundled jsPDF build (MIT, see `vendor/jspdf-LICENSE.txt`) |
+
+## User guide
+
+A 20-page illustrated guide is generated from the app itself, so its screenshots
+are never out of date:
+
+```
+npm install
+npm run guide          # writes Drug-Bag-Tracker-User-Guide.pdf
+```
+
+`docs/build-guide.js` drives the real app in a browser, captures every figure,
+generates sample documents, and renders `docs/user-guide.html` to A4. The sample
+PDF pages need python3 with `pypdfium2`; without it the guide still builds, minus
+those figures. Everything it writes is git-ignored — rebuild it rather than
+committing a stale copy.
 
 ## Tests
 

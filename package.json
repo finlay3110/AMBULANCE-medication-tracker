@@ -4,7 +4,8 @@
   "private": true,
   "description": "Browser-based drug bag and controlled drugs register generator",
   "scripts": {
-    "test": "node test/smoke.js"
+    "test": "node test/smoke.js",
+    "guide": "node docs/build-guide.js"
   },
   "devDependencies": {
     "playwright": "^1.40.0"
