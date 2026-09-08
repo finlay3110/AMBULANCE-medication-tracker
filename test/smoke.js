@@ -27,9 +27,11 @@ const MM = 72 / 25.4;           // millimetres to PDF points
 const BOTTOM_LIMIT_MM = 6;      // nothing may be drawn below this from the page foot
 
 let failures = 0;
+const failed = [];
 function check(name, ok, detail) {
   if (ok) { console.log("  ok   " + name); return; }
   failures += 1;
+  failed.push(name);
   console.log("  FAIL " + name + (detail ? "  — " + detail : ""));
 }
 function eq(name, actual, expected) {
@@ -704,6 +706,10 @@ function serve() {
     server.close();
   }
 
-  console.log(failures ? "\n" + failures + " check(s) failed" : "\nall checks passed");
+  // Name them in the summary too, so a run captured by its last lines — in CI
+  // output, or a tail — still says what went wrong.
+  console.log(failures
+    ? "\n" + failures + " check(s) failed: " + failed.join("; ")
+    : "\nall checks passed");
   process.exit(failures ? 1 : 0);
 })();
