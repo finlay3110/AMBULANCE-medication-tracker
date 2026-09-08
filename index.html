@@ -3,9 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Drug Bag Tracker</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b6b3a'/%3E%3Cpath d='M14 6h4v8h8v4h-8v8h-4v-8H6v-4h8z' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
+<script>
+  /* Applied before first paint so a chosen dark theme does not flash light.
+     app.js owns the toggle; this only restores what was stored. */
+  try {
+    var t = localStorage.getItem("drug-bag-tracker/theme");
+    if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) { /* private browsing: fall back to the system preference */ }
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -17,6 +26,7 @@
     </div>
   </div>
   <div class="topbar-actions">
+    <button type="button" class="btn ghost" id="themeBtn" aria-live="polite">Theme: auto</button>
     <button type="button" class="btn ghost" id="resetAll">Clear all</button>
     <button type="button" class="btn primary" id="generateTop">Generate PDF</button>
   </div>
@@ -68,7 +78,14 @@
 
     <div class="card">
       <h2>Company details</h2>
-      <p class="hint">These appear on the bag label and in the "if found" notice.</p>
+      <p class="hint">These appear on the bag label and in the &ldquo;if found&rdquo; notice.
+        Save them once and load them into any bag or register &mdash; the logo comes too.</p>
+      <div class="actions company-actions">
+        <button type="button" class="btn ghost small" id="companyExportBtn">Export company details</button>
+        <button type="button" class="btn ghost small" id="companyImportBtn">Import company details</button>
+        <input type="file" id="companyFile" accept="application/json,.json" hidden>
+      </div>
+      <p class="notice" id="companyResult" hidden></p>
       <div class="grid">
         <label class="field">
           <span>Company name <b>*</b></span>
@@ -81,6 +98,18 @@
         <label class="field span2">
           <span>Address</span>
           <textarea id="companyAddress" rows="3" placeholder="Unit 4, Example Way, Townsville, AB1 2CD"></textarea>
+        </label>
+        <div class="field span2" id="f-cqc">
+          <label class="check-row">
+            <input type="checkbox" id="cqcRegistered">
+            <span>CQC registered</span>
+          </label>
+          <small class="echo">Tick if your organisation is registered with the Care Quality
+            Commission. The registration number is printed beside the company name.</small>
+        </div>
+        <label class="field span2" id="f-cqcNumber" hidden>
+          <span>CQC registration number <b>*</b></span>
+          <input type="text" id="cqcNumber" placeholder="e.g. 1-234567890" autocomplete="off">
         </label>
         <div class="field span2" id="f-logo">
           <span>Company logo</span>
@@ -179,11 +208,21 @@
             <span>Batch number</span>
             <input type="text" id="mBatch" placeholder="e.g. X2257R">
           </label>
-          <label class="field">
+          <div class="field" id="f-mExpiry">
             <span>Expiry <b>*</b></span>
-            <input type="text" id="mExpiry" placeholder="e.g. 07/25, 10/2027 or 18/10/2025" autocomplete="off">
-            <small class="echo" id="mExpiryEcho">Month or full date &mdash; 07/25, 10/2027, 18/10/2025, Oct 2025</small>
-          </label>
+            <div class="expiry-row">
+              <select id="mExpiryPrecision" aria-label="Expiry precision">
+                <option value="month">Month</option>
+                <option value="day">Exact date</option>
+              </select>
+              <input type="month" id="mExpiryMonth" aria-label="Expiry month">
+              <input type="date" id="mExpiryDate" aria-label="Expiry date" hidden>
+              <input type="text" id="mExpiryText" hidden autocomplete="off"
+                     placeholder="e.g. 07/25, 10/2027 or 18/10/2025">
+            </div>
+            <small class="echo" id="mExpiryEcho">Most packs state a month, which runs to the last
+              day of that month. Switch to an exact date where the pack gives one.</small>
+          </div>
           <label class="field" id="f-mDoses">
             <span>Number of doses <b>*</b></span>
             <input type="number" id="mDoses" min="1" max="200" step="1" placeholder="e.g. 12">
@@ -263,7 +302,58 @@
   </section>
 </main>
 
-<footer class="foot">Runs entirely in your browser · PDF by jsPDF</footer>
+<footer class="foot">
+  <p class="foot-line">
+    <strong>Provided as is, with no warranty.</strong> This tool formats what you type &mdash; it
+    does not check it. You are responsible for verifying every entry, and every legal category,
+    before a document is used.
+  </p>
+  <details class="foot-details">
+    <summary>Disclaimer, licence and sources</summary>
+    <div class="foot-body">
+      <h3>Disclaimer</h3>
+      <p>Drug Bag Tracker is a document generator, not a clinical, pharmaceutical or legal
+        reference. Before any document is used, check that every entry matches the stock actually
+        held: name, formulation, strength, batch number, expiry, quantity and legal category.</p>
+      <p>The categories offered (GSL, P, POM, S17, S19, CD), including those pre-filled by the
+        quick-add list, are <strong>suggestions to save typing, not legal determinations</strong>.
+        Medicines can sit in more than one category depending on indication, route and pack size;
+        legislation is amended over time and this list is a fixed snapshot; and the categories were
+        not verified against primary legislation when the list was compiled. Check them against
+        current legislation and your own medicines policy, patient group directions and standard
+        operating procedures.</p>
+      <p>The controlled drugs register produced here is a convenience format. It does not
+        constitute, replace or discharge any statutory record-keeping duty. Satisfy yourself that
+        it meets the requirements that apply to you before relying on it.</p>
+      <p>Everything is stored in this browser and nothing is uploaded. Browser storage is not a
+        backup &mdash; export your documents to JSON and keep those files somewhere durable. No
+        responsibility is accepted for work lost to browser storage being cleared.</p>
+
+      <h3>Licence</h3>
+      <p>MIT licence. Copyright &copy; 2026 Finlay Russell. The software is provided &ldquo;as
+        is&rdquo;, without warranty of any kind, express or implied, including but not limited to
+        the warranties of merchantability, fitness for a particular purpose and non-infringement.
+        In no event shall the author be liable for any claim, damages or other liability arising
+        from, out of or in connection with the software or its use.</p>
+      <p>PDF generation uses <a href="https://github.com/parallax/jsPDF" rel="noopener"
+        target="_blank">jsPDF</a>, bundled under the MIT licence.</p>
+
+      <h3>Sources</h3>
+      <p>The medication list is a user-supplied list of common pre-hospital medicines. The legal
+        category suggestions were informed by the Journal of Paramedic Practice article
+        <em>Paramedics and medicines: legal considerations</em>, NHS Specialist Pharmacy Service
+        guidance on legal mechanisms to supply and administer medicines, HCPC guidance on sale,
+        supply and administration, and Schedules 17 and 19 of the Human Medicines Regulations
+        2012. None of these is a substitute for the legislation itself, and the primary text was
+        not reachable when the list was compiled, so the categories are unverified against it.</p>
+    </div>
+  </details>
+  <p class="foot-credit">
+    Made by Finlay Russell &mdash;
+    <a href="mailto:finlay3110@gmail.com">finlay3110@gmail.com</a><br>
+    Runs entirely in your browser &middot; PDF by jsPDF
+  </p>
+</footer>
 
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="expiry.js"></script>

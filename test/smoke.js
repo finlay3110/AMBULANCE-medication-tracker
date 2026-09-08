@@ -27,9 +27,11 @@ const MM = 72 / 25.4;           // millimetres to PDF points
 const BOTTOM_LIMIT_MM = 6;      // nothing may be drawn below this from the page foot
 
 let failures = 0;
+const failed = [];
 function check(name, ok, detail) {
   if (ok) { console.log("  ok   " + name); return; }
   failures += 1;
+  failed.push(name);
   console.log("  FAIL " + name + (detail ? "  — " + detail : ""));
 }
 function eq(name, actual, expected) {
@@ -208,6 +210,35 @@ async function testPdfs(page) {
   }
 }
 
+/* Drive the expiry picker: "YYYY-MM" uses the month control, a full date the
+   date control. */
+async function setExpiry(page, value) {
+  const parsed = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(value);
+  if (parsed && parsed[3]) {
+    await page.selectOption("#mExpiryPrecision", "day");
+    await page.fill("#mExpiryDate", value);
+    return;
+  }
+  const month = parsed ? value.slice(0, 7) : monthFrom(value);
+  await page.selectOption("#mExpiryPrecision", "month");
+  await page.fill("#mExpiryMonth", month);
+}
+
+/* "10/2027" and "07/25" as typed on a pack, to the picker's YYYY-MM. */
+function monthFrom(value) {
+  const m = /^(\d{1,2})\/(\d{2}|\d{4})$/.exec(value);
+  if (!m) throw new Error("test helper cannot express expiry: " + value);
+  const year = m[2].length === 2 ? "20" + m[2] : m[2];
+  return year + "-" + m[1].padStart(2, "0");
+}
+
+/* A json file that is valid but none of ours. */
+function junkPath() {
+  const p = path.join(os.tmpdir(), "smoke-junk.json");
+  fs.writeFileSync(p, JSON.stringify({ hello: "world" }));
+  return p;
+}
+
 /* ---------------- app behaviour ----------------------------------------- */
 async function testApp(page) {
   console.log("\napp behaviour");
@@ -226,7 +257,7 @@ async function testApp(page) {
     await page.fill("#mPresentation", m.presentation);
     await page.fill("#mDose", m.dose);
     await page.fill("#mBatch", m.batch);
-    await page.fill("#mExpiry", m.expiry);
+    await setExpiry(page, m.expiry);
     await page.fill("#mDoses", String(m.doses));
     await page.click("#medSubmit");
   };
@@ -247,11 +278,28 @@ async function testApp(page) {
   await page.fill("#mName", "Junk");
   await page.fill("#mPresentation", "Tablet");
   await page.fill("#mDose", "1mg");
-  await page.fill("#mExpiry", "banana");
+  await page.selectOption("#mExpiryPrecision", "month");
+  await page.fill("#mExpiryMonth", "");
   await page.fill("#mDoses", "2");
   await page.click("#medSubmit");
-  check("an unparseable expiry is refused", await page.isVisible("#medError"));
+  check("a missing expiry is refused", await page.isVisible("#medError"));
   eq("and nothing was added", await page.textContent("#medCount"), "1");
+
+  // The picker stores a month as YYYY-MM and an exact date as YYYY-MM-DD.
+  await page.selectOption("#mExpiryPrecision", "month");
+  await page.fill("#mExpiryMonth", "2027-10");
+  check("a month reads back as the month end",
+    (await page.textContent("#mExpiryEcho")).includes("10/2027"),
+    await page.textContent("#mExpiryEcho"));
+  await page.selectOption("#mExpiryPrecision", "day");
+  eq("switching precision carries the value over",
+    await page.inputValue("#mExpiryDate"), "2027-10-01");
+  await page.fill("#mExpiryDate", "2027-10-18");
+  check("an exact date reads back in full",
+    (await page.textContent("#mExpiryEcho")).includes("18/10/2027"),
+    await page.textContent("#mExpiryEcho"));
+  await page.selectOption("#mExpiryPrecision", "month");
+  eq("and back again", await page.inputValue("#mExpiryMonth"), "2027-10");
 
   // Copy sets up a second batch of the same drug.
   await page.click('.med:first-child .icon-btn:nth-child(3)');
@@ -263,7 +311,7 @@ async function testApp(page) {
   const soonExpiry = String(nextMonth.getMonth() + 1).padStart(2, "0") +
     "/" + nextMonth.getFullYear();
   await page.fill("#mBatch", "B2");
-  await page.fill("#mExpiry", soonExpiry);
+  await setExpiry(page, soonExpiry);
   await page.fill("#mDoses", "12");
   await page.click("#medSubmit");
   eq("second batch added", await page.textContent("#medCount"), "2");
@@ -365,7 +413,7 @@ async function testApp(page) {
   await page.fill("#mPresentation", "Ampoule");
   await page.fill("#mDose", "2mg/1ml");
   await page.fill("#mBatch", "OND1");
-  await page.fill("#mExpiry", "10/2027");
+  await setExpiry(page, "10/2027");
   await page.fill("#mDoses", "4");
   await page.selectOption("#mSchedule", "S19");
   await page.click("#medSubmit");
@@ -401,6 +449,39 @@ async function testApp(page) {
   await page.click('[data-tab="meds"]');
   eq("clearing the date clears the flag",
     await page.locator(".chip.bad").filter({ hasText: "EXPIRES IN SERVICE" }).count(), 0);
+
+  // CQC: the number is only asked for, and only printed, when registered.
+  await page.click('[data-tab="setup"]');
+  check("the registration number is hidden until it applies",
+    await page.locator("#f-cqcNumber").isHidden());
+  await page.check("#cqcRegistered");
+  check("and appears once ticked", await page.locator("#f-cqcNumber").isVisible());
+
+  await page.click('[data-tab="generate"]');
+  await page.click("#generateBtn");
+  check("generating is refused without the number",
+    (await page.textContent("#genError")).includes("CQC registration number"),
+    await page.textContent("#genError"));
+
+  await page.click('[data-tab="setup"]');
+  await page.fill("#cqcNumber", "1-234567890");
+  const cqcOnPage = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    const d = Object.assign({}, st.docs.bag.setup,
+      { medications: st.docs.bag.medications, mode: "bag" });
+    return window.DrugBagPDF.build(d).internal.pages[1].join("\n").indexOf("CQC 1-234567890") >= 0;
+  });
+  check("and is printed beside the company name", cqcOnPage);
+
+  await page.uncheck("#cqcRegistered");
+  const cqcGone = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    const d = Object.assign({}, st.docs.bag.setup,
+      { medications: st.docs.bag.medications, mode: "bag" });
+    return window.DrugBagPDF.build(d).internal.pages[1].join("\n").indexOf("CQC") < 0;
+  });
+  check("un-ticking removes it from the document", cqcGone);
+  await page.check("#cqcRegistered");
 
   // Company logo: stored scaled down, carried into the export, drawn on the PDF.
   await page.click('[data-tab="setup"]');
@@ -445,6 +526,49 @@ async function testApp(page) {
   check("the export carries the logo",
     JSON.parse(fs.readFileSync(savedBag, "utf8")).setup.logo.startsWith("data:image/png"));
 
+  // The company profile travels on its own, logo and CQC included.
+  await page.click('[data-tab="setup"]');
+  const [companyFile] = await Promise.all([
+    page.waitForEvent("download"), page.click("#companyExportBtn")]);
+  eq("the company export is named after the company",
+    companyFile.suggestedFilename(), "Company-Test-Medical-Ltd.json");
+  const companyPath = path.join(os.tmpdir(), "smoke-company.json");
+  await companyFile.saveAs(companyPath);
+  const profile = JSON.parse(fs.readFileSync(companyPath, "utf8"));
+  eq("it is stamped with its format", profile.format, "drug-bag-tracker/company");
+  eq("carries the company", profile.companyName, "Test Medical Ltd");
+  eq("carries the CQC registration", profile.cqcNumber, "1-234567890");
+  check("carries the logo", String(profile.logo).startsWith("data:image/png"));
+  check("and nothing about the bag itself",
+    profile.bagNumber === undefined && profile.medications === undefined);
+
+  // Wipe the company half, then load it back from the file.
+  await page.fill("#companyName", "Wrong Ltd");
+  await page.fill("#companyPhone", "000");
+  await page.uncheck("#cqcRegistered");
+  await page.setInputFiles("#companyFile", companyPath);
+  await page.waitForFunction(() =>
+    document.getElementById("companyResult").textContent.indexOf("Loaded company") >= 0);
+  eq("import restores the company", await page.inputValue("#companyName"), "Test Medical Ltd");
+  eq("and the contact", await page.inputValue("#companyPhone"), "01234 567890");
+  check("and the CQC registration", await page.isChecked("#cqcRegistered"));
+  eq("with its number", await page.inputValue("#cqcNumber"), "1-234567890");
+  eq("leaving the bag number alone", await page.inputValue("#bagNumber"), "1");
+
+  // A whole bag export also works as a source of company details.
+  await page.fill("#companyName", "Wrong Ltd");
+  await page.setInputFiles("#companyFile", savedBag);
+  await page.waitForFunction(() =>
+    document.getElementById("companyResult").textContent.indexOf("Loaded") >= 0);
+  eq("company details lift out of a bag export",
+    await page.inputValue("#companyName"), "Test Medical Ltd");
+
+  await page.setInputFiles("#companyFile", junkPath());
+  await page.waitForFunction(() =>
+    document.getElementById("companyResult").className.indexOf("bad") >= 0);
+  eq("a file with no company details changes nothing",
+    await page.inputValue("#companyName"), "Test Medical Ltd");
+
   // Import, from the setup tab, restores a document over whatever is open.
   await page.click('[data-tab="setup"]');
   check("setup offers an import", await page.isVisible("#importSetupBtn"));
@@ -481,9 +605,7 @@ async function testApp(page) {
   eq("and loads its stock", await page.textContent("#medCount"), "1");
 
   // A file that is not one of ours must not wipe what is open.
-  const junk = path.join(os.tmpdir(), "smoke-junk.json");
-  fs.writeFileSync(junk, JSON.stringify({ hello: "world" }));
-  await page.setInputFiles("#importFile", junk);
+  await page.setInputFiles("#importFile", junkPath());
   await page.waitForFunction(() =>
     document.getElementById("importResult").className.indexOf("bad") >= 0);
   eq("a foreign json is refused", await page.textContent("#medCount"), "1");
@@ -500,6 +622,49 @@ async function testApp(page) {
   await page.check('input[name=docMode][value=bag]');
   eq("the bag came through unharmed", await page.inputValue("#bagNumber"), "1");
   eq("with its medications", await page.textContent("#medCount"), "2");
+
+  // Theme: auto follows the system, and an explicit choice overrides it.
+  const rootTheme = () => page.getAttribute("html", "data-theme");
+  eq("starts on auto", await page.textContent("#themeBtn"), "Theme: auto");
+  eq("auto leaves the system in charge", await rootTheme(), null);
+
+  await page.click("#themeBtn");
+  eq("cycles to light", await page.textContent("#themeBtn"), "Theme: light");
+  eq("and says so on the root", await rootTheme(), "light");
+
+  await page.click("#themeBtn");
+  eq("cycles to dark", await page.textContent("#themeBtn"), "Theme: dark");
+  eq("and says so on the root", await rootTheme(), "dark");
+  check("dark actually repaints", await page.evaluate(() => {
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const parts = bg.match(/\d+/g).map(Number);
+    return parts[0] + parts[1] + parts[2] < 200;   // a dark page, not a light one
+  }));
+
+  await page.reload();
+  eq("the choice survives a reload", await rootTheme(), "dark");
+  eq("and the button agrees", await page.textContent("#themeBtn"), "Theme: dark");
+
+  await page.click("#themeBtn");
+  eq("cycles back to auto", await rootTheme(), null);
+
+  // Disclaimer, licence and credit are on the page, not only in the repo.
+  check("the as-is notice is always visible",
+    (await page.textContent(".foot-line")).includes("Provided as is, with no warranty"));
+  check("the licence and sources are reachable",
+    await page.isVisible(".foot-details summary"));
+  // Collapse the whitespace the HTML source wraps on, so phrases match.
+  const footer = (await page.textContent(".foot-body")).replace(/\s+/g, " ");
+  check("the licence is named", footer.includes("MIT licence") &&
+    footer.includes("Finlay Russell"));
+  check("the category caveat is spelled out",
+    footer.includes("not legal determinations"));
+  check("sources are credited", footer.includes("Human Medicines Regulations 2012"));
+  check("the author is credited",
+    (await page.textContent(".foot-credit")).includes("Finlay Russell"));
+  eq("with a contact address",
+    await page.getAttribute('.foot-credit a[href^="mailto:"]', "href"),
+    "mailto:finlay3110@gmail.com");
 
   check("no page errors", errors.length === 0, errors.join("; "));
 }
@@ -541,6 +706,10 @@ function serve() {
     server.close();
   }
 
-  console.log(failures ? "\n" + failures + " check(s) failed" : "\nall checks passed");
+  // Name them in the summary too, so a run captured by its last lines — in CI
+  // output, or a tail — still says what went wrong.
+  console.log(failures
+    ? "\n" + failures + " check(s) failed: " + failed.join("; ")
+    : "\nall checks passed");
   process.exit(failures ? 1 : 0);
 })();

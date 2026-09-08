@@ -25,8 +25,12 @@
   var SETUP_FIELDS = [
     "companyName", "companyPhone", "companyAddress",
     "bagNumber", "preppedBy", "checkedBy", "preppedDate", "sealNumber",
-    "safeLocation", "inServiceUntil"
+    "safeLocation", "inServiceUntil", "cqcNumber"
   ];
+
+  /* The company profile: everything that is about the organisation rather than
+     a particular bag or safe, so it can be saved once and reused. */
+  var COMPANY_FIELDS = ["companyName", "companyPhone", "companyAddress", "cqcNumber"];
 
   // Kept out of SETUP_FIELDS: not a text input, and set through its own control.
   var LOGO_MAX_EDGE = 480;      // px, plenty for print at the size it is drawn
@@ -223,6 +227,7 @@
     var before = JSON.stringify(setup);
     var wasInService = setup.inServiceUntil;
     SETUP_FIELDS.forEach(function (f) { setup[f] = $(f).value.trim(); });
+    setup.cqcRegistered = $("cqcRegistered").checked;
     if (JSON.stringify(setup) !== before) touch();
     save();
     // The service window decides every expiry flag, so the list needs redrawing.
@@ -233,12 +238,207 @@
   function fillSetup() {
     var setup = doc().setup;
     SETUP_FIELDS.forEach(function (f) { $(f).value = setup[f] || ""; });
+    $("cqcRegistered").checked = !!setup.cqcRegistered;
+    syncCqc();
     showLogo();
     resetLogoHint();
     if (!$("preppedDate").value) {
       $("preppedDate").value = new Date().toISOString().slice(0, 10);
       setup.preppedDate = $("preppedDate").value;
     }
+  }
+
+  /* ---------------- company profile ---------------- */
+
+  /* The registration number is only asked for, and only printed, when the
+     organisation says it is registered. */
+  function syncCqc() {
+    $("f-cqcNumber").hidden = !$("cqcRegistered").checked;
+  }
+
+  function companyMessage(kind, text) {
+    var box = $("companyResult");
+    box.className = "notice " + kind;
+    box.textContent = text;
+    box.hidden = false;
+  }
+
+  function companyFileName() {
+    var name = (doc().setup.companyName || "")
+      .trim().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return "Company-" + (name || "details") + ".json";
+  }
+
+  function exportCompany() {
+    readSetup();
+    var setup = doc().setup;
+    var profile = { format: "drug-bag-tracker/company", version: 1 };
+    COMPANY_FIELDS.forEach(function (f) { profile[f] = setup[f] || ""; });
+    profile.cqcRegistered = !!setup.cqcRegistered;
+    if (setup.logo) {
+      profile.logo = setup.logo;
+      profile.logoW = setup.logoW;
+      profile.logoH = setup.logoH;
+    }
+
+    var blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = companyFileName();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    companyMessage("good", "Saved as " + companyFileName() + ".");
+  }
+
+  /*
+   * Accepts a company file, and also a whole exported bag or register, taking
+   * just the company half of it — so details can be lifted from any old export.
+   */
+  function companyFrom(parsed) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    if (parsed.format === "drug-bag-tracker/company") return parsed;
+    if (parsed.setup && typeof parsed.setup === "object") return parsed.setup;
+    if (typeof parsed.companyName === "string") return parsed;
+    return null;
+  }
+
+  function importCompany(file) {
+    var reader = new FileReader();
+    reader.onerror = function () { companyMessage("bad", "That file could not be read."); };
+    reader.onload = function () {
+      var parsed;
+      try {
+        parsed = JSON.parse(reader.result);
+      } catch (e) {
+        companyMessage("bad", "\u201c" + file.name + "\u201d is not a valid .json file.");
+        return;
+      }
+      var profile = companyFrom(parsed);
+      if (!profile) {
+        companyMessage("bad", "\u201c" + file.name + "\u201d does not contain company details. " +
+          "Nothing has been changed.");
+        return;
+      }
+
+      var setup = doc().setup;
+      COMPANY_FIELDS.forEach(function (f) {
+        if (typeof profile[f] === "string") setup[f] = profile[f];
+      });
+      setup.cqcRegistered = !!profile.cqcRegistered;
+      if (typeof profile.logo === "string" && profile.logo) {
+        setup.logo = profile.logo;
+        setup.logoW = profile.logoW || 0;
+        setup.logoH = profile.logoH || 0;
+      }
+      touch();
+      fillSetup();
+      save();
+      renderSummary();
+      companyMessage("good", "Loaded company details for " +
+        (setup.companyName || "this organisation") +
+        (profile.logo ? ", including the logo." : "."));
+    };
+    reader.readAsText(file);
+  }
+
+  /* ---------------- theme ---------------- */
+
+  /*
+   * Kept under its own key rather than in the document state, so it survives
+   * "clear all" and is shared by both documents. "auto" stores nothing on the
+   * root element and lets prefers-color-scheme decide.
+   */
+  var THEME_KEY = "drug-bag-tracker/theme";
+  var THEMES = ["auto", "light", "dark"];
+  var theme = "auto";
+
+  function applyTheme() {
+    if (theme === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", theme);
+    $("themeBtn").textContent = "Theme: " + theme;
+    $("themeBtn").setAttribute("aria-label", "Colour theme: " + theme + ". Click to change.");
+  }
+
+  function loadTheme() {
+    var stored;
+    try { stored = localStorage.getItem(THEME_KEY); } catch (e) { stored = null; }
+    if (THEMES.indexOf(stored) >= 0) theme = stored;
+    applyTheme();
+  }
+
+  function cycleTheme() {
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* not fatal */ }
+    applyTheme();
+  }
+
+  /* ---------------- expiry picker ---------------- */
+
+  /* Safari has never supported <input type="month">; it renders a text box. */
+  function supportsInput(type) {
+    var probe = document.createElement("input");
+    probe.setAttribute("type", type);
+    return probe.type === type;
+  }
+
+  var HAS_MONTH_INPUT = supportsInput("month");
+
+  /*
+   * Remembered separately because by the time the precision select fires its
+   * change event it already reads as the new precision, so the value that was
+   * on screen a moment ago can no longer be read back through it.
+   */
+  var lastExpiry = "";
+
+  function expiryPrecision() {
+    return $("mExpiryPrecision").value === "day" ? "day" : "month";
+  }
+
+  /* Show the control matching the chosen precision. */
+  function syncExpiryInputs() {
+    var day = expiryPrecision() === "day";
+    if (!HAS_MONTH_INPUT && !day) {
+      $("mExpiryMonth").hidden = true;
+      $("mExpiryDate").hidden = true;
+      $("mExpiryText").hidden = false;
+      return;
+    }
+    $("mExpiryText").hidden = true;
+    $("mExpiryMonth").hidden = day;
+    $("mExpiryDate").hidden = !day;
+  }
+
+  /* The canonical value: YYYY-MM for a month, YYYY-MM-DD for an exact date. */
+  function expiryValue() {
+    if (expiryPrecision() === "day") return $("mExpiryDate").value.trim();
+    return HAS_MONTH_INPUT ? $("mExpiryMonth").value.trim() : $("mExpiryText").value.trim();
+  }
+
+  function setExpiryValue(raw) {
+    var parsed = window.Expiry.parse(raw);
+    lastExpiry = parsed ? parsed.iso : "";
+    $("mExpiryMonth").value = "";
+    $("mExpiryDate").value = "";
+    $("mExpiryText").value = "";
+
+    if (!parsed) {
+      $("mExpiryPrecision").value = "month";
+      if (!HAS_MONTH_INPUT) $("mExpiryText").value = raw || "";
+      syncExpiryInputs();
+      return;
+    }
+    $("mExpiryPrecision").value = parsed.precision;
+    if (parsed.precision === "day") {
+      $("mExpiryDate").value = parsed.iso;
+    } else if (HAS_MONTH_INPUT) {
+      $("mExpiryMonth").value = parsed.iso;
+    } else {
+      $("mExpiryText").value = parsed.iso;
+    }
+    syncExpiryInputs();
   }
 
   /* ---------------- quick add ---------------- */
@@ -479,7 +679,7 @@
       presentation: $("mPresentation").value.trim(),
       dose: $("mDose").value.trim(),
       batch: $("mBatch").value.trim(),
-      expiry: $("mExpiry").value.trim(),
+      expiry: expiryValue(),
       doses: parseInt($("mDoses").value, 10),
       schedule: isCdMode() ? "CD" : $("mSchedule").value,
       unit: isCdMode() ? ($("mUnit").value.trim() || "ampoules") : ""
@@ -490,7 +690,9 @@
     if (!m.name) return "Enter the medication name.";
     if (!m.presentation) return "Enter the presentation (tablet, sachet, ampoule…).";
     if (!m.dose) return "Enter the dose or strength.";
-    if (!m.expiry) return "Enter the expiry.";
+    if (!m.expiry) {
+      return expiryPrecision() === "day" ? "Pick the expiry date." : "Pick the expiry month.";
+    }
     if (!window.Expiry.parse(m.expiry)) {
       return "Expiry \u201c" + m.expiry + "\u201d was not understood. Use a month " +
         "(07/25, 10/2027, Oct 2025) or a full date (18/10/2025).";
@@ -502,9 +704,11 @@
   }
 
   function clearMedForm() {
-    ["mName", "mPresentation", "mDose", "mBatch", "mExpiry", "mDoses"].forEach(function (id) {
+    ["mName", "mPresentation", "mDose", "mBatch", "mDoses"].forEach(function (id) {
       $(id).value = "";
     });
+    $("mExpiryPrecision").value = "month";
+    setExpiryValue("");
     $("mSchedule").value = "GSL";
     $("mUnit").value = isCdMode() ? "ampoules" : "";
     $("medNote").hidden = true;
@@ -522,7 +726,7 @@
     $("mPresentation").value = m.presentation;
     $("mDose").value = m.dose;
     $("mBatch").value = m.batch;
-    $("mExpiry").value = m.expiry;
+    setExpiryValue(m.expiry);
     $("mDoses").value = m.doses;
     $("mSchedule").value = m.schedule || "GSL";
     $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
@@ -569,10 +773,14 @@
   /* Live confirmation of how the typed expiry was read. */
   function updateExpiryEcho() {
     var el = $("mExpiryEcho");
-    var raw = $("mExpiry").value.trim();
+    var raw = expiryValue();
+    if (raw) lastExpiry = raw;
     if (!raw) {
       el.className = "echo";
-      el.textContent = "Month or full date \u2014 07/25, 10/2027, 18/10/2025, Oct 2025";
+      el.textContent = expiryPrecision() === "day"
+        ? "Pick the exact date printed on the pack."
+        : "Most packs state a month, which runs to the last day of that month. " +
+          "Switch to an exact date where the pack gives one.";
       return;
     }
     var p = window.Expiry.parse(raw);
@@ -796,6 +1004,9 @@
     var missing = [];
     if (!doc().setup.companyName) missing.push("company name");
     if (!doc().setup.companyPhone) missing.push("contact number");
+    if (doc().setup.cqcRegistered && !doc().setup.cqcNumber) {
+      missing.push("CQC registration number");
+    }
     if (!doc().setup.bagNumber) missing.push(words().identity[0].toLowerCase());
     if (!doc().setup.preppedBy) missing.push(words().preppedBy[0].toLowerCase());
     if (missing.length) {
@@ -808,6 +1019,7 @@
     }
     var data = {};
     SETUP_FIELDS.forEach(function (f) { data[f] = doc().setup[f] || ""; });
+    data.cqcRegistered = !!doc().setup.cqcRegistered;
     data.logo = doc().setup.logo || "";
     data.logoW = doc().setup.logoW || 0;
     data.logoH = doc().setup.logoH || 0;
@@ -933,6 +1145,7 @@
 
   /* ---------------- wiring ---------------- */
   function init() {
+    loadTheme();
     load();
     applyMode();
     fillSetup();
@@ -949,7 +1162,12 @@
     document.querySelectorAll("[data-goto]").forEach(function (b) {
       b.addEventListener("click", function () { readSetup(); showTab(b.dataset.goto); });
     });
-    SETUP_FIELDS.forEach(function (f) { $(f).addEventListener("change", readSetup); });
+    SETUP_FIELDS.forEach(function (f) {
+      // Both events: "change" alone only fires on blur, so a value typed and
+      // then left without clicking away was never persisted.
+      $(f).addEventListener("change", readSetup);
+      $(f).addEventListener("input", readSetup);
+    });
 
     $("medForm").addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -969,7 +1187,25 @@
       $("mName").focus();
     });
     $("medCancel").addEventListener("click", clearMedForm);
-    $("mExpiry").addEventListener("input", updateExpiryEcho);
+    ["mExpiryMonth", "mExpiryDate", "mExpiryText"].forEach(function (id) {
+      $(id).addEventListener("input", updateExpiryEcho);
+      $(id).addEventListener("change", updateExpiryEcho);
+    });
+    $("mExpiryPrecision").addEventListener("change", function () {
+      // Carry the value across so switching precision does not lose the entry.
+      syncExpiryInputs();
+      if (!expiryValue() && lastExpiry) {
+        var p = window.Expiry.parse(lastExpiry);
+        if (p && expiryPrecision() === "day") {
+          $("mExpiryDate").value = p.precision === "day" ? p.iso : p.iso + "-01";
+        } else if (p) {
+          var monthIso = p.iso.slice(0, 7);
+          if (HAS_MONTH_INPUT) $("mExpiryMonth").value = monthIso;
+          else $("mExpiryText").value = monthIso;
+        }
+      }
+      updateExpiryEcho();
+    });
     $("mSchedule").addEventListener("change", function () {
       // Controlled drugs default to the register layout; still overridable.
       if (this.value === "CD") $("mCdLog").checked = true;
@@ -1011,6 +1247,18 @@
       }
     });
 
+    $("cqcRegistered").addEventListener("change", function () {
+      syncCqc();
+      readSetup();
+      if (this.checked) $("cqcNumber").focus();
+    });
+    $("companyExportBtn").addEventListener("click", exportCompany);
+    $("companyImportBtn").addEventListener("click", function () { $("companyFile").click(); });
+    $("companyFile").addEventListener("change", function () {
+      if (this.files && this.files[0]) importCompany(this.files[0]);
+      this.value = "";
+    });
+
     $("logoBtn").addEventListener("click", function () { $("logoFile").click(); });
     $("logoFile").addEventListener("change", function () {
       if (this.files && this.files[0]) readLogo(this.files[0]);
@@ -1025,6 +1273,8 @@
       this.value = "";
     });
 
+    $("themeBtn").addEventListener("click", cycleTheme);
+
     $("resetAll").addEventListener("click", function () {
       var what = isCdMode() ? "CD register" : "drug bag";
       var message = "Clear the details and list for this " + what +
@@ -1037,6 +1287,7 @@
       doc().setup = {};
       doc().medications = [];
       doc().meta = {};
+      $("companyResult").hidden = true;
       showLogo();
       resetLogoHint();
       SETUP_FIELDS.forEach(function (f) { $(f).value = ""; });
