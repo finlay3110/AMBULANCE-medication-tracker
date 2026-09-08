@@ -147,6 +147,16 @@
             <span>Number of doses <b>*</b></span>
             <input type="number" id="mDoses" min="1" max="200" step="1" placeholder="e.g. 12">
           </label>
+          <label class="field" id="f-mUnit" hidden>
+            <span>Unit <b>*</b></span>
+            <input type="text" id="mUnit" list="unitList" placeholder="e.g. ampoules" autocomplete="off">
+            <datalist id="unitList">
+              <option value="ampoules"><option value="vials"><option value="tablets">
+              <option value="capsules"><option value="syringes"><option value="tubes">
+              <option value="patches"><option value="ml"><option value="mg">
+            </datalist>
+            <small class="echo">Printed on the register so the balance column is unambiguous.</small>
+          </label>
           <label class="field" id="f-mSchedule">
             <span>Schedule</span>
             <select id="mSchedule">
@@ -193,6 +203,7 @@
     <div class="card">
       <h2 id="saveTitle">Save / load bag</h2>
       <p class="hint" id="saveHint">Everything stays on this device — nothing is uploaded. Export a bag to reuse it next time.</p>
+      <p class="notice" id="backupWarning" hidden></p>
       <div class="actions">
         <button type="button" class="btn ghost" id="exportBtn">Export (.json)</button>
         <button type="button" class="btn ghost" id="importBtn">Import (.json)</button>

@@ -13,8 +13,8 @@
   var state = {
     mode: "bag",
     docs: {
-      bag: { setup: {}, medications: [] },
-      cd: { setup: {}, medications: [] }
+      bag: { setup: {}, medications: [], meta: {} },
+      cd: { setup: {}, medications: [], meta: {} }
     },
     editing: null
   };
@@ -108,6 +108,7 @@
 
     // Schedule and seal number are bag-only; safe location is CD-only.
     $("f-mSchedule").hidden = isCdMode();
+    $("f-mUnit").hidden = !isCdMode();
     $("f-sealNumber").hidden = isCdMode();
     $("f-safeLocation").hidden = !isCdMode();
   }
@@ -133,8 +134,23 @@
   function readDoc(parsed) {
     return {
       setup: (parsed && parsed.setup) || {},
-      medications: (parsed && Array.isArray(parsed.medications)) ? parsed.medications : []
+      medications: (parsed && Array.isArray(parsed.medications)) ? parsed.medications : [],
+      meta: (parsed && parsed.meta) || {}
     };
+  }
+
+  /* Record that this document has changed since it was last exported. */
+  function touch() {
+    if (!doc().meta) doc().meta = {};
+    doc().meta.changedAt = Date.now();
+  }
+
+  /* Browser storage is not a backup, so say so until a copy has been saved. */
+  function needsBackup() {
+    var meta = doc().meta || {};
+    if (!doc().medications.length) return false;
+    if (!meta.exportedAt) return true;
+    return (meta.changedAt || 0) > meta.exportedAt;
   }
 
   function load() {
@@ -178,7 +194,9 @@
   /* ---------------- setup tab ---------------- */
   function readSetup() {
     var setup = doc().setup;
+    var before = JSON.stringify(setup);
     SETUP_FIELDS.forEach(function (f) { setup[f] = $(f).value.trim(); });
+    if (JSON.stringify(setup) !== before) touch();
     save();
     renderSummary();
   }
@@ -215,7 +233,8 @@
       batch: $("mBatch").value.trim(),
       expiry: $("mExpiry").value.trim(),
       doses: parseInt($("mDoses").value, 10),
-      schedule: isCdMode() ? "CD" : $("mSchedule").value
+      schedule: isCdMode() ? "CD" : $("mSchedule").value,
+      unit: isCdMode() ? ($("mUnit").value.trim() || "ampoules") : ""
     };
   }
 
@@ -239,6 +258,7 @@
       $(id).value = "";
     });
     $("mSchedule").value = "GSL";
+    $("mUnit").value = isCdMode() ? "ampoules" : "";
     updateExpiryEcho();
     state.editing = null;
     $("medFormTitle").textContent = words().addTitle;
@@ -256,6 +276,7 @@
     $("mExpiry").value = m.expiry;
     $("mDoses").value = m.doses;
     $("mSchedule").value = m.schedule || "GSL";
+    $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
     updateExpiryEcho();
     state.editing = index;
     $("medFormTitle").textContent = words().editTitle;
@@ -266,12 +287,31 @@
     window.scrollTo(0, 0);
   }
 
+  /*
+   * Prefill the form from an existing entry, leaving batch, expiry and quantity
+   * blank. Each batch is held as its own entry so it gets its own log page and,
+   * for a controlled drug, its own running balance.
+   */
+  function copyForNewBatch(index) {
+    var m = doc().medications[index];
+    clearMedForm();
+    $("mName").value = m.name;
+    $("mPresentation").value = m.presentation;
+    $("mDose").value = m.dose;
+    $("mSchedule").value = m.schedule || "GSL";
+    $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
+    $("medFormTitle").textContent = "Add another batch of " + m.name;
+    $("mBatch").focus();
+    window.scrollTo(0, 0);
+  }
+
   function move(index, delta) {
     var to = index + delta;
     if (to < 0 || to >= doc().medications.length) return;
     var m = doc().medications.splice(index, 1)[0];
     doc().medications.splice(to, 0, m);
     if (state.editing === index) state.editing = to;
+    touch();
     save();
     renderMeds();
   }
@@ -324,6 +364,13 @@
       name.appendChild(tag);
       name.appendChild(document.createTextNode(m.name));
 
+      if (doc().medications.filter(function (o) { return o.name === m.name; }).length > 1) {
+        var multi = document.createElement("span");
+        multi.className = "chip batch";
+        multi.textContent = "batch " + (m.batch || "—");
+        name.appendChild(multi);
+      }
+
       var parsed = window.Expiry.parse(m.expiry);
       var st = window.Expiry.status(parsed);
       if (st === "expired" || st === "soon") {
@@ -338,7 +385,7 @@
       var meta = document.createElement("div");
       meta.className = "med-meta";
       meta.textContent = m.presentation + " · " + m.dose + " · x" + m.doses +
-        (isCdMode() ? " held" : " dose" + (m.doses === 1 ? "" : "s")) +
+        (isCdMode() ? " " + (m.unit || "held") : " dose" + (m.doses === 1 ? "" : "s")) +
         " · batch " + (m.batch || "—") +
         " · exp " + window.Expiry.format(parsed, m.expiry);
       main.appendChild(name);
@@ -348,11 +395,13 @@
       btns.className = "med-btns";
       [["↑", function () { move(i, -1); }, ""],
        ["↓", function () { move(i, 1); }, ""],
+       ["Copy", function () { copyForNewBatch(i); }, ""],
        ["Edit", function () { startEdit(i); }, ""],
        ["Delete", function () {
           if (confirm("Remove " + m.name + " from this bag?")) {
             doc().medications.splice(i, 1);
             if (state.editing === i) clearMedForm();
+            touch();
             save();
             renderMeds();
           }
@@ -405,6 +454,20 @@
       d.appendChild(dt); d.appendChild(dd);
       box.appendChild(d);
     });
+
+    var backup = $("backupWarning");
+    if (needsBackup()) {
+      var never = !(doc().meta || {}).exportedAt;
+      backup.className = "notice warn";
+      backup.textContent = never
+        ? "This " + (isCdMode() ? "register" : "bag") + " has never been exported. It lives only " +
+          "in this browser, and clearing site data or using a private window will lose it \u2014 " +
+          "export a copy to keep."
+        : "Changed since the last export. Export again so your saved copy matches.";
+      backup.hidden = false;
+    } else {
+      backup.hidden = true;
+    }
 
     var warn = $("expiryWarning");
     var expired = doc().medications.filter(function (m) {
@@ -492,9 +555,13 @@
     var a = document.createElement("a");
     a.href = url;
     a.download = exportName();
+    if (!doc().meta) doc().meta = {};
+    doc().meta.exportedAt = Date.now();
+    save();
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    renderSummary();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
@@ -506,6 +573,7 @@
         if (parsed.mode === "cd" || parsed.mode === "bag") state.mode = parsed.mode;
         doc().setup = parsed.setup || {};
         doc().medications = Array.isArray(parsed.medications) ? parsed.medications : [];
+        doc().meta = { exportedAt: Date.now() };
         applyMode();
         fillSetup();
         clearMedForm();
@@ -550,6 +618,7 @@
       }
       if (state.editing === null) doc().medications.push(m);
       else doc().medications[state.editing] = m;
+      touch();
       save();
       clearMedForm();
       renderMeds();
@@ -580,11 +649,17 @@
     });
 
     $("resetAll").addEventListener("click", function () {
-      if (!confirm("Clear the details and list for this " +
-          (isCdMode() ? "CD register" : "drug bag") + "? The other document is left alone."))
-        return;
+      var what = isCdMode() ? "CD register" : "drug bag";
+      var message = "Clear the details and list for this " + what +
+        "? The other document is left alone.";
+      if (needsBackup()) {
+        message = "This " + what + " has unsaved changes that have not been exported, and " +
+          "clearing cannot be undone.\n\n" + message;
+      }
+      if (!confirm(message)) return;
       doc().setup = {};
       doc().medications = [];
+      doc().meta = {};
       SETUP_FIELDS.forEach(function (f) { $(f).value = ""; });
       fillSetup();
       clearMedForm();

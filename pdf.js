@@ -43,6 +43,31 @@
     return data.mode === "cd";
   }
 
+  function unitOf(med) {
+    return txt(med.unit);
+  }
+
+  /* Column heading carrying the unit, so a balance is never ambiguous. */
+  function unitHead(label, med) {
+    var u = unitOf(med);
+    return u ? label + " (" + u + ")" : label;
+  }
+
+  function quantityText(med) {
+    var u = unitOf(med);
+    return String(med.doses) + (u ? " " + u : "");
+  }
+
+  /*
+   * Each batch is a separate entry with its own log, so two entries for one
+   * drug need their batch in the page title to tell the pages apart.
+   */
+  function pageTitle(data, med) {
+    var sameName = data.medications.filter(function (m) { return m.name === med.name; });
+    if (sameName.length < 2) return txt(med.name);
+    return txt(med.name) + "  \u2014  batch " + (txt(med.batch) || "not recorded");
+  }
+
   function txt(v) {
     return (v === null || v === undefined) ? "" : String(v).trim();
   }
@@ -341,13 +366,13 @@
   }
 
   /* Grey title bar naming the medication. */
-  function logTitle(doc, med, y, colour) {
+  function logTitle(doc, data, med, y, colour) {
     var c = colour || HEAD_BG;
     doc.setFillColor(c[0], c[1], c[2]);
     doc.rect(PAGE.ml, y, CONTENT_W, 11, "F");
     doc.setTextColor(255, 255, 255);
     setFont(doc, 13, "bold");
-    doc.text(txt(med.name), PAGE.w / 2, y + 7.5, { align: "center" });
+    doc.text(pageTitle(data, med), PAGE.w / 2, y + 7.5, { align: "center" });
     doc.setTextColor(INK[0], INK[1], INK[2]);
     return y + 11;
   }
@@ -443,10 +468,10 @@
         ];
       },
       contHeadH: 8,
-      firstHead: function (y) { return logDetailBar(doc, med, logTitle(doc, med, y)) + 7; },
+      firstHead: function (y) { return logDetailBar(doc, med, logTitle(doc, data, med, y)) + 7; },
       contHead: function (y) {
         setFont(doc, 10, "bold");
-        doc.text(txt(med.name) + " (continued)", PAGE.ml, y + 4);
+        doc.text(pageTitle(data, med) + " (continued)", PAGE.ml, y + 4);
         return y + 8;
       }
     });
@@ -464,7 +489,8 @@
     function openingBalance(y) {
       // Balance brought forward, drawn across merged leading columns.
       return drawRow(doc, PAGE.ml, y, [55, 18, 18, 18, 40, 37], [
-        { text: "BALANCE BROUGHT FORWARD (stock entered " + (txt(data.preppedDate) || "\u2014") + ")",
+        { text: "BALANCE BROUGHT FORWARD \u2014 " + quantityText(med) +
+            " (stock entered " + (txt(data.preppedDate) || "\u2014") + ")",
           bold: true, fill: [235, 238, 241], size: 8 },
         { text: "\u2014", align: "center", fill: [235, 238, 241] },
         { text: "\u2014", align: "center", fill: [235, 238, 241] },
@@ -476,8 +502,8 @@
 
     drawPaginatedLog(doc, data, med, state, {
       widths: widths,
-      header: ["DATE", "TIME", "PRF NO", "GIVEN", "DISCARD", "BALANCE",
-               "ADMINISTERED BY", "WITNESSED BY"],
+      header: ["DATE", "TIME", "PRF NO", unitHead("GIVEN", med), unitHead("DISCARD", med),
+               unitHead("BALANCE", med), "ADMINISTERED BY", "WITNESSED BY"],
       headSize: 7.5,
       headAlign: ["left", "left", "left", "center", "center", "center", "left", "left"],
       rowCount: rows,
@@ -489,7 +515,7 @@
       },
       contHeadH: 8,
       firstHead: function (y) {
-        y = logTitle(doc, med, y, CD_BG);
+        y = logTitle(doc, data, med, y, CD_BG);
         y = logDetailBar(doc, med, y);
         y += 5;
         setFont(doc, 7.5, "normal");
@@ -503,7 +529,7 @@
       contHead: function (y) {
         setFont(doc, 10, "bold");
         doc.setTextColor(CD_BG[0], CD_BG[1], CD_BG[2]);
-        doc.text("CD register \u2014 " + txt(med.name) + " (continued)", PAGE.ml, y + 4);
+        doc.text("CD register \u2014 " + pageTitle(data, med) + " (continued)", PAGE.ml, y + 4);
         doc.setTextColor(INK[0], INK[1], INK[2]);
         return y + 8;
       }
@@ -544,7 +570,7 @@
     y = detailStrip(doc, details, y) + 6;
 
     // Stock held
-    var widths = [56, 30, 30, 22, 22, 26]; // = 186
+    var widths = [52, 28, 28, 28, 24, 26]; // = 186
     y += drawRow(doc, PAGE.ml, y, widths, [
       "Controlled drug", "Presentation", "Strength", "Quantity", "Batch", "Expiry"
     ].map(function (h) {
@@ -562,7 +588,7 @@
         { text: m.name },
         { text: m.presentation },
         { text: m.dose },
-        { text: String(m.doses), bold: true, align: "center" },
+        { text: quantityText(m), bold: true, align: "center" },
         { text: m.batch || "\u2014" },
         { text: expiryText(m), colour: expiryColour(m), bold: !!expiryColour(m) }
       ], { minH: 8 });
@@ -605,6 +631,102 @@
     doc.text(lines, PAGE.ml + 4, y + 11);
 
     footer(doc, data, state.page);
+  }
+
+
+  /* ------------------------------------------------------------------ */
+  /* Controlled drugs: recurring stock check record (landscape)          */
+  /* ------------------------------------------------------------------ */
+
+  /* One sheet per group of drugs, so the columns never squeeze too far. */
+  var STOCK_CHECK_MAX_DRUGS = 7;
+
+  function drawStockCheckSheets(doc, data, state) {
+    for (var i = 0; i < data.medications.length; i += STOCK_CHECK_MAX_DRUGS) {
+      drawStockCheckSheet(doc, data, state,
+        data.medications.slice(i, i + STOCK_CHECK_MAX_DRUGS),
+        i, data.medications.length);
+    }
+  }
+
+  function drawStockCheckSheet(doc, data, state, meds, offset, total) {
+    doc.addPage("a4", "landscape");
+    state.page += 1;
+
+    var W = PAGE.h, H = PAGE.w;
+    var contentW = W - PAGE.ml - PAGE.mr;
+    var y = PAGE.mt;
+
+    var part = total > meds.length
+      ? "  \u00b7  drugs " + (offset + 1) + "\u2013" + (offset + meds.length) + " of " + total
+      : "";
+
+    doc.setFillColor(CD_BG[0], CD_BG[1], CD_BG[2]);
+    doc.rect(PAGE.ml, y, contentW, 13, "F");
+    doc.setTextColor(255, 255, 255);
+    setFont(doc, 13, "bold");
+    doc.text("CD SAFE \u2014 STOCK CHECK RECORD", PAGE.ml + 4, y + 6);
+    setFont(doc, 9, "normal");
+    doc.text("Safe " + (txt(data.bagNumber) || "\u2014") + "  \u00b7  " + txt(data.companyName) +
+      (txt(data.safeLocation) ? "  \u00b7  " + txt(data.safeLocation) : "") + part,
+      PAGE.ml + 4, y + 11);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    y += 13 + 4;
+
+    setFont(doc, 7.5, "normal");
+    doc.setTextColor(120, 40, 40);
+    doc.text("Enter the balance counted for each drug. Any discrepancy must be reported " +
+      "immediately in line with your controlled drugs policy and recorded on the drug's " +
+      "register page.", PAGE.ml, y);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    y += 6;
+
+    var fixed = 22 + 14 + 38 + 38;                  // date, time, checked by, witnessed by
+    var drugW = (contentW - fixed) / meds.length;
+    var widths = [22, 14].concat(meds.map(function () { return drugW; })).concat([38, 38]);
+    var header = ["DATE", "TIME"].concat(meds.map(function (m) {
+      var u = unitOf(m);
+      return txt(m.name) + (u ? " (" + u + ")" : "") +
+        (txt(m.batch) ? " \u2014 " + txt(m.batch) : "");
+    })).concat(["CHECKED BY", "WITNESSED BY"]);
+
+    var headH = drawRow(doc, PAGE.ml, y, widths, header.map(function (h, i) {
+      return {
+        text: h, bold: true, fill: SOFT_BG, size: 7,
+        align: (i >= 2 && i < 2 + meds.length) ? "center" : "left"
+      };
+    }), { minH: 12 });
+
+    // Expected balance, so a counted figure has something to be checked against.
+    var expected = [
+      { text: "Expected at issue", bold: true, size: 7, fill: [235, 238, 241] },
+      { text: "", fill: [235, 238, 241] }
+    ].concat(meds.map(function (m) {
+      return { text: String(m.doses), bold: true, align: "center", fill: [235, 238, 241] };
+    })).concat([
+      { text: txt(data.preppedBy), size: 7, fill: [235, 238, 241] },
+      { text: txt(data.checkedBy), size: 7, fill: [235, 238, 241] }
+    ]);
+
+    y += headH;
+    y += drawRow(doc, PAGE.ml, y, widths, expected, { minH: 8 });
+
+    var rowH = 11;
+    var blank = widths.map(function () { return { text: "" }; });
+    while (y + rowH <= H - PAGE.mb) {
+      y += drawRow(doc, PAGE.ml, y, widths, blank, { minH: rowH });
+    }
+
+    landscapeFooter(doc, data, state, W, H);
+  }
+
+  function landscapeFooter(doc, data, state, W, H) {
+    setFont(doc, 8, "normal");
+    doc.setTextColor(110, 118, 128);
+    doc.text("CD safe " + (txt(data.bagNumber) || "\u2014") + "  \u00b7  " + txt(data.companyName),
+      PAGE.ml, H - 7);
+    doc.text("Page " + state.page, W - PAGE.mr, H - 7, { align: "right" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
   }
 
   /* ------------------------------------------------------------------ */
@@ -660,13 +782,7 @@
       y += drawRow(doc, PAGE.ml, y, widths, blank, { minH: rowH });
     }
 
-    // Footer, positioned for the landscape page.
-    setFont(doc, 8, "normal");
-    doc.setTextColor(110, 118, 128);
-    doc.text("CD safe " + (txt(data.bagNumber) || "\u2014") + "  \u00b7  " + txt(data.companyName),
-      PAGE.ml, H - 7);
-    doc.text("Page " + state.page, W - PAGE.mr, H - 7, { align: "right" });
-    doc.setTextColor(INK[0], INK[1], INK[2]);
+    landscapeFooter(doc, data, state, W, H);
   }
 
   /* ------------------------------------------------------------------ */
@@ -689,6 +805,7 @@
     if (isCdDoc(data)) {
       drawCdCover(doc, data, state);
       data.medications.forEach(function (m) { drawCdLog(doc, data, m, state); });
+      drawStockCheckSheets(doc, data, state);
       drawPouchSheet(doc, data, state);
     } else {
       drawLabel(doc, data, state);

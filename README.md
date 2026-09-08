@@ -29,6 +29,16 @@ static host). There are three tabs:
    Entries can be edited, reordered and removed.
 3. **Generate** — download the PDF, or preview it in a new tab.
 
+### Batches
+
+Each batch is held as its own entry, so a drug held in two batches is added
+twice — the **Copy** button on an entry prefills a new one with the name,
+presentation, dose and unit, leaving you to type the new batch, expiry and
+quantity. Each batch then gets its own log page and, for a controlled drug, its
+own running balance, which is what you want: one balance cannot span two
+batches. Where a name appears more than once, the page title carries the batch
+so the pages can be told apart.
+
 ### Expiry dates
 
 Expiry is typed however it is printed on the pack — `07/25`, `10/2027`,
@@ -52,7 +62,14 @@ into a paramedic's personal pouch when needed. The CD document reflects that:
 - **A register page per drug** — balance brought forward, then columns for date,
   time, PRF number, amount given, amount discarded, running balance, and
   separate administering and witness signatures. Spare rows beyond the stock
-  count give discards and part doses a line of their own.
+  count give discards and part doses a line of their own. Every quantity column
+  is headed with the drug's own unit (`BALANCE (ampoules)`), so a balance can
+  never be read as millilitres when it means ampoules.
+- **A stock check record** — a landscape grid with a column per drug, headed
+  with its unit and batch, and the quantity issued printed on the first row so a
+  counted balance has something to check against. Dated rows take the count, the
+  person checking and the witness. Past seven drugs it continues on further
+  sheets rather than squeezing the columns.
 - **A landscape sign-out sheet** — date, time out, drug and strength, quantity,
   who issued it, who is carrying it (name and registration number), time back
   in, quantity returned and who signed it back in.
@@ -71,6 +88,11 @@ exported from. Exports are named after the bag or safe number, so bag 1 saves as
 A bag saved by an earlier version that contained controlled drugs is migrated on
 first load: the CDs are moved out into the register, leaving the bag with the
 rest.
+
+Browser storage is not a backup — clearing site data, or using a private window,
+loses it. The generate tab says so until a document has been exported, warns
+again once it has changed since that export, and says it plainly before
+clearing.
 
 ## What the PDF contains
 
@@ -102,4 +124,19 @@ Designed for desktop, with a single-column responsive layout for phones.
 | `app.js` | Form state, validation, storage, import/export |
 | `expiry.js` | Expiry parsing and expired / expiring-soon status |
 | `pdf.js` | A4 PDF generation (label page + usage logs) |
+| `test/smoke.js` | Smoke test: expiry parser, app flow, PDF page counts and margins |
 | `vendor/jspdf.umd.min.js` | Bundled jsPDF build (MIT, see `vendor/jspdf-LICENSE.txt`) |
+
+## Tests
+
+```
+npm install     # playwright, for driving a real browser
+npm test
+```
+
+`test/smoke.js` checks the expiry parser directly against `expiry.js`, then
+drives the app in Chromium: adding and rejecting entries, copying a batch,
+switching document type without disturbing the other document, export names, the
+backup warning, and reload persistence. It also builds both PDFs and reads back
+jsPDF's page content streams to assert the page count and that nothing is drawn
+below the bottom margin — which is what catches a pagination regression.
