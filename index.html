@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drug Bag Tracker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b6b3a'/%3E%3Cpath d='M14 6h4v8h8v4h-8v8h-4v-8H6v-4h8z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="cross" aria-hidden="true">+</span>
+    <div>
+      <h1>Drug Bag Tracker</h1>
+      <p>Drug bag and controlled drugs records</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button type="button" class="btn ghost" id="resetAll">Clear all</button>
+    <button type="button" class="btn primary" id="generateTop">Generate PDF</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" role="tab" data-tab="setup" aria-selected="true">1. Setup</button>
+  <button class="tab" role="tab" data-tab="meds" aria-selected="false"><span id="tabMedsLabel">2. Medications</span> <span class="pill" id="medCount">0</span></button>
+  <button class="tab" role="tab" data-tab="generate" aria-selected="false">3. Generate</button>
+</nav>
+
+<main>
+  <!-- ============ SETUP ============ -->
+  <section class="panel active" id="panel-setup" role="tabpanel">
+    <div class="card">
+      <h2>Document type</h2>
+      <p class="hint">Controlled drugs are held in the CD safe, not in a drug bag, so they are
+        recorded on a completely separate document. Pick one &mdash; each keeps its own details
+        and its own list, so you can prepare both without them mixing.</p>
+      <div class="modes">
+        <label class="mode">
+          <input type="radio" name="docMode" value="bag" checked>
+          <span>
+            <b>Drug bag</b>
+            <small>Sealed bag or pouch. Produces the bag label plus a usage log per medication.</small>
+          </span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="docMode" value="cd">
+          <span>
+            <b>Controlled drugs (CD safe)</b>
+            <small>Stock held in the safe. Produces a register with running balances, plus a
+              sign-out sheet for drugs taken into a personal pouch.</small>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Start from a saved file</h2>
+      <p class="hint">Load a bag or register you exported earlier. This is the quickest way to
+        prepare a repeat bag &mdash; import it, then update the batch numbers and expiry dates.
+        The document type comes from the file.</p>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="importSetupBtn">Import (.json)</button>
+      </div>
+      <p class="notice" id="importResult" hidden></p>
+    </div>
+
+    <div class="card">
+      <h2>Company details</h2>
+      <p class="hint">These appear on the bag label and in the "if found" notice.</p>
+      <div class="grid">
+        <label class="field">
+          <span>Company name <b>*</b></span>
+          <input type="text" id="companyName" placeholder="e.g. Northern Event Medical Ltd" autocomplete="organization">
+        </label>
+        <label class="field">
+          <span>Contact number <b>*</b></span>
+          <input type="tel" id="companyPhone" placeholder="e.g. 01234 567890" autocomplete="tel">
+        </label>
+        <label class="field span2">
+          <span>Address</span>
+          <textarea id="companyAddress" rows="3" placeholder="Unit 4, Example Way, Townsville, AB1 2CD"></textarea>
+        </label>
+        <div class="field span2" id="f-logo">
+          <span>Company logo</span>
+          <div class="logo-row">
+            <span class="logo-preview" id="logoPreview" hidden><img id="logoImg" alt=""></span>
+            <button type="button" class="btn ghost small" id="logoBtn">Choose image&hellip;</button>
+            <button type="button" class="btn ghost small" id="logoRemove" hidden>Remove</button>
+            <input type="file" id="logoFile" accept="image/png,image/jpeg" hidden>
+          </div>
+          <small class="echo" id="logoHint">PNG or JPEG, printed at the top of the label.
+            Stored with this document and included when you export it.</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="detailsTitle">Bag details</h2>
+      <div class="grid">
+        <label class="field" id="f-bagNumber">
+          <span>Drug bag number <b>*</b></span>
+          <input type="text" id="bagNumber" placeholder="e.g. DB-014">
+        </label>
+        <label class="field" id="f-preppedBy">
+          <span>Prepped by <b>*</b></span>
+          <input type="text" id="preppedBy" placeholder="Name of person who prepped the bag">
+        </label>
+        <label class="field" id="f-preppedDate">
+          <span>Prepped date</span>
+          <input type="date" id="preppedDate">
+        </label>
+        <label class="field" id="f-inServiceUntil">
+          <span>In service until</span>
+          <input type="date" id="inServiceUntil">
+          <small class="echo" id="inServiceHint">Optional. Expiry is then checked up to this date,
+            so anything running out while the bag is away is flagged.</small>
+        </label>
+        <label class="field" id="f-sealNumber">
+          <span>Seal number</span>
+          <input type="text" id="sealNumber" placeholder="Optional">
+        </label>
+        <label class="field span2" id="f-safeLocation" hidden>
+          <span>Safe location</span>
+          <input type="text" id="safeLocation" placeholder="e.g. Secure room, Station 4">
+        </label>
+        <label class="field span2" id="f-checkedBy">
+          <span>Checked by</span>
+          <input type="text" id="checkedBy" placeholder="Second person for the two-person check (optional)">
+          <small class="echo" id="checkedByHint">The label page carries a prepared-by / checked-by signature block. Leave blank to sign it by hand.</small>
+        </label>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn primary" data-goto="meds">Next: Medications &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ============ MEDICATIONS ============ -->
+  <section class="panel" id="panel-meds" role="tabpanel">
+    <div class="card">
+      <h2>Quick add</h2>
+      <p class="hint">Search the list to fill the form, then add the batch, expiry and quantity.
+        The suggested legal category is a starting point to save typing &mdash; check it against
+        your own policy and current legislation before the document is used.</p>
+      <div class="quick">
+        <input type="search" id="quickAdd" autocomplete="off" role="combobox"
+               aria-expanded="false" aria-controls="quickResults"
+               placeholder="Search by name, formulation or strength&hellip;">
+        <ul class="quick-results" id="quickResults" role="listbox" hidden></ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="medFormTitle">Add medication</h2>
+      <form id="medForm" novalidate>
+        <div class="grid">
+          <label class="field span2">
+            <span>Medication <b>*</b></span>
+            <input type="text" id="mName" placeholder="e.g. Paracetamol infant suspension">
+          </label>
+          <label class="field">
+            <span>Presentation <b>*</b></span>
+            <input type="text" id="mPresentation" list="presentationList" placeholder="e.g. Sachet">
+            <datalist id="presentationList">
+              <option value="Tablet"><option value="Sachet"><option value="Capsule">
+              <option value="Dispersible tablet"><option value="Instant melt tabs">
+              <option value="Pre-filled syringe"><option value="Ampoule"><option value="Vial">
+              <option value="Nebule"><option value="Inhaler"><option value="Suppository">
+            </datalist>
+          </label>
+          <label class="field">
+            <span>Dose / strength <b>*</b></span>
+            <input type="text" id="mDose" placeholder="e.g. 120mg/5ml">
+          </label>
+          <label class="field">
+            <span>Batch number</span>
+            <input type="text" id="mBatch" placeholder="e.g. X2257R">
+          </label>
+          <label class="field">
+            <span>Expiry <b>*</b></span>
+            <input type="text" id="mExpiry" placeholder="e.g. 07/25, 10/2027 or 18/10/2025" autocomplete="off">
+            <small class="echo" id="mExpiryEcho">Month or full date &mdash; 07/25, 10/2027, 18/10/2025, Oct 2025</small>
+          </label>
+          <label class="field" id="f-mDoses">
+            <span>Number of doses <b>*</b></span>
+            <input type="number" id="mDoses" min="1" max="200" step="1" placeholder="e.g. 12">
+          </label>
+          <label class="field" id="f-mUnit" hidden>
+            <span>Unit <b>*</b></span>
+            <input type="text" id="mUnit" list="unitList" placeholder="e.g. ampoules" autocomplete="off">
+            <datalist id="unitList">
+              <option value="ampoules"><option value="vials"><option value="tablets">
+              <option value="capsules"><option value="syringes"><option value="tubes">
+              <option value="patches"><option value="ml"><option value="mg">
+            </datalist>
+            <small class="echo">Printed on the register so the balance column is unambiguous.</small>
+          </label>
+          <label class="field" id="f-mSchedule">
+            <span>Schedule</span>
+            <select id="mSchedule">
+              <option value="GSL">GSL — General sales list</option>
+              <option value="P">P — Pharmacy only</option>
+              <option value="POM">POM — Prescription only</option>
+              <option value="S17">S17 — Paramedic exemption (HMR Sch 17)</option>
+              <option value="S19">S19 — Emergency parenteral (HMR Sch 19)</option>
+            </select>
+          </label>
+        </div>
+        <p class="notice info" id="medNote" hidden></p>
+        <p class="error" id="medError" hidden></p>
+        <div class="actions">
+          <button type="submit" class="btn primary" id="medSubmit">Add medication</button>
+          <button type="button" class="btn ghost" id="medCancel" hidden>Cancel edit</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2><span id="contentsTitle">Bag contents</span> <span class="pill" id="medCount2">0</span></h2>
+      <div id="medList" class="med-list"></div>
+      <p class="empty" id="medEmpty">No medications added yet. Add the first one above.</p>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn ghost" data-goto="setup">&larr; Back</button>
+      <button type="button" class="btn primary" data-goto="generate">Next: Generate &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ============ GENERATE ============ -->
+  <section class="panel" id="panel-generate" role="tabpanel">
+    <div class="card">
+      <h2>Generate document</h2>
+      <p class="hint" id="generateHint">A4 PDF: page 1 is the bag label, followed by one usage log per medication.</p>
+      <div id="summary" class="summary"></div>
+      <p class="notice" id="expiryWarning" hidden></p>
+      <p class="error" id="genError" hidden></p>
+      <div class="actions">
+        <button type="button" class="btn primary big" id="generateBtn">Download PDF</button>
+        <button type="button" class="btn ghost" id="previewBtn">Preview in new tab</button>
+      </div>
+      <div class="notice reminder" id="pdfReminder" hidden>
+        <span id="pdfReminderText"></span>
+        <button type="button" class="btn ghost small" id="pdfReminderExport">Export .json now</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2 id="saveTitle">Save / load bag</h2>
+      <p class="hint" id="saveHint">Everything stays on this device — nothing is uploaded. Export a bag to reuse it next time.</p>
+      <p class="notice" id="backupWarning" hidden></p>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="exportBtn">Export (.json)</button>
+        <button type="button" class="btn ghost" id="importBtn">Import (.json)</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn ghost" data-goto="meds">&larr; Back</button>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">Runs entirely in your browser · PDF by jsPDF</footer>
+
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="expiry.js"></script>
+<script src="medicines.js"></script>
+<script src="pdf.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
