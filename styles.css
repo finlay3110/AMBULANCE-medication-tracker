@@ -262,3 +262,29 @@ body.cd-mode .mode:has(input:checked) { background: #fbf2f2; }
 .expiry-row { display: flex; gap: 8px; }
 .expiry-row select { flex: 0 0 auto; width: auto; }
 .expiry-row input { flex: 1 1 auto; min-width: 0; }
+
+/* ---------- footer: disclaimer, licence, credit ---------- */
+.foot {
+  max-width: 900px; margin: 0 auto; padding: 0 24px 40px;
+  color: var(--muted); font-size: 12px; text-align: left;
+}
+.foot-line {
+  margin: 0 0 12px; padding: 11px 14px;
+  background: #fdf3dd; border: 1px solid #ecd396; border-radius: 8px;
+  color: #6f4a00; font-size: 13px; line-height: 1.5;
+}
+.foot-line strong { color: #5c3d00; }
+.foot-details {
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+}
+.foot-details summary {
+  cursor: pointer; padding: 10px 14px; font-weight: 600; color: #35485c; font-size: 13px;
+}
+.foot-details[open] summary { border-bottom: 1px solid var(--line); }
+.foot-body { padding: 4px 14px 14px; line-height: 1.55; }
+.foot-body h3 { margin: 14px 0 4px; font-size: 13px; color: var(--ink); }
+.foot-body p { margin: 0 0 8px; }
+.foot-body a { color: var(--accent); }
+.foot-credit { margin: 14px 0 0; text-align: center; line-height: 1.7; }
+.foot-credit a { color: var(--accent); }
+@media (max-width: 700px) { .foot { padding: 0 12px 36px; } }

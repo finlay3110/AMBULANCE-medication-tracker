@@ -1,5 +1,13 @@
 # Drug Bag Tracker
 
+Made by Finlay Russell — <finlay3110@gmail.com>
+
+> **Provided as is, with no warranty.** This tool formats what you type; it does
+> not check it. You are responsible for verifying every entry, and every legal
+> category, before a document is used. The legal categories it suggests are not
+> legal determinations and were not verified against primary legislation.
+> See [DISCLAIMER.md](DISCLAIMER.md) in full before using it.
+
 A browser-based tool for ambulance and event-medical companies to produce
 medication records as A4 PDFs. It makes two separate documents:
 
@@ -187,6 +195,8 @@ Designed for desktop, with a single-column responsive layout for phones.
 | `expiry.js` | Expiry parsing and expired / expiring-soon status |
 | `medicines.js` | Quick-add catalogue and its search |
 | `pdf.js` | A4 PDF generation (label page + usage logs) |
+| `DISCLAIMER.md` | Disclaimer, legal-category caveats and sources |
+| `LICENSE` | MIT licence |
 | `test/smoke.js` | Smoke test: expiry parser, app flow, PDF page counts and margins |
 | `vendor/jspdf.umd.min.js` | Bundled jsPDF build (MIT, see `vendor/jspdf-LICENSE.txt`) |
 
@@ -203,3 +213,43 @@ switching document type without disturbing the other document, export names, the
 backup warning, and reload persistence. It also builds both PDFs and reads back
 jsPDF's page content streams to assert the page count and that nothing is drawn
 below the bottom margin — which is what catches a pagination regression.
+
+## Disclaimer
+
+Read [DISCLAIMER.md](DISCLAIMER.md) in full. In short: this is a document
+generator, not a clinical, pharmaceutical or legal reference. It formats what
+you type without checking it. The legal categories it offers and pre-fills are
+suggestions to save typing, not legal determinations — check them against
+current legislation and your own medicines policy. The controlled drugs register
+is a convenience format and does not discharge any statutory record-keeping
+duty. Browser storage is not a backup.
+
+## Licence
+
+MIT. Copyright © 2026 Finlay Russell. See [LICENSE](LICENSE).
+
+PDF generation uses [jsPDF](https://github.com/parallax/jsPDF), bundled in
+`vendor/` under the MIT licence (`vendor/jspdf-LICENSE.txt`).
+
+## Sources
+
+The medication list is a user-supplied list of common pre-hospital medicines;
+formulations and strengths follow that file.
+
+The legal category suggestions were informed by the public sources below. None
+is a substitute for the legislation itself, and the primary text at
+legislation.gov.uk was not reachable from the environment where the catalogue
+was compiled, so the categories are **unverified against primary legislation**:
+
+- Journal of Paramedic Practice, *Paramedics and medicines: legal considerations* —
+  [article](https://www.paramedicpractice.com/content/features/paramedics-and-medicines-legal-considerations),
+  [PDF](https://jrcalc.org.uk/wp-content/uploads/2016/09/JPAR_2016_8_8_408_415.pdf)
+- NHS Specialist Pharmacy Service, [*Legal mechanisms to supply and administer medicines to individuals*](https://sps.nhs.uk/articles/legal-mechanisms-to-supply-and-administer-medicines-to-individuals/)
+- HCPC, [*Sale, supply and administration*](https://www.hcpc-uk.org/standards/meeting-our-standards/scope-of-practice/medicines-and-prescribing-rights/sale-supply-and-administration/)
+- The Human Medicines Regulations 2012,
+  [Schedule 17](https://www.legislation.gov.uk/uksi/2012/1916/schedule/17) and
+  [Schedule 19](https://www.legislation.gov.uk/uksi/2012/1916/schedule/19)
+
+## Author
+
+Finlay Russell — <finlay3110@gmail.com>

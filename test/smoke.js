@@ -540,6 +540,24 @@ async function testApp(page) {
   eq("the bag came through unharmed", await page.inputValue("#bagNumber"), "1");
   eq("with its medications", await page.textContent("#medCount"), "2");
 
+  // Disclaimer, licence and credit are on the page, not only in the repo.
+  check("the as-is notice is always visible",
+    (await page.textContent(".foot-line")).includes("Provided as is, with no warranty"));
+  check("the licence and sources are reachable",
+    await page.isVisible(".foot-details summary"));
+  // Collapse the whitespace the HTML source wraps on, so phrases match.
+  const footer = (await page.textContent(".foot-body")).replace(/\s+/g, " ");
+  check("the licence is named", footer.includes("MIT licence") &&
+    footer.includes("Finlay Russell"));
+  check("the category caveat is spelled out",
+    footer.includes("not legal determinations"));
+  check("sources are credited", footer.includes("Human Medicines Regulations 2012"));
+  check("the author is credited",
+    (await page.textContent(".foot-credit")).includes("Finlay Russell"));
+  eq("with a contact address",
+    await page.getAttribute('.foot-credit a[href^="mailto:"]', "href"),
+    "mailto:finlay3110@gmail.com");
+
   check("no page errors", errors.length === 0, errors.join("; "));
 }
 

@@ -273,7 +273,58 @@
   </section>
 </main>
 
-<footer class="foot">Runs entirely in your browser · PDF by jsPDF</footer>
+<footer class="foot">
+  <p class="foot-line">
+    <strong>Provided as is, with no warranty.</strong> This tool formats what you type &mdash; it
+    does not check it. You are responsible for verifying every entry, and every legal category,
+    before a document is used.
+  </p>
+  <details class="foot-details">
+    <summary>Disclaimer, licence and sources</summary>
+    <div class="foot-body">
+      <h3>Disclaimer</h3>
+      <p>Drug Bag Tracker is a document generator, not a clinical, pharmaceutical or legal
+        reference. Before any document is used, check that every entry matches the stock actually
+        held: name, formulation, strength, batch number, expiry, quantity and legal category.</p>
+      <p>The categories offered (GSL, P, POM, S17, S19, CD), including those pre-filled by the
+        quick-add list, are <strong>suggestions to save typing, not legal determinations</strong>.
+        Medicines can sit in more than one category depending on indication, route and pack size;
+        legislation is amended over time and this list is a fixed snapshot; and the categories were
+        not verified against primary legislation when the list was compiled. Check them against
+        current legislation and your own medicines policy, patient group directions and standard
+        operating procedures.</p>
+      <p>The controlled drugs register produced here is a convenience format. It does not
+        constitute, replace or discharge any statutory record-keeping duty. Satisfy yourself that
+        it meets the requirements that apply to you before relying on it.</p>
+      <p>Everything is stored in this browser and nothing is uploaded. Browser storage is not a
+        backup &mdash; export your documents to JSON and keep those files somewhere durable. No
+        responsibility is accepted for work lost to browser storage being cleared.</p>
+
+      <h3>Licence</h3>
+      <p>MIT licence. Copyright &copy; 2026 Finlay Russell. The software is provided &ldquo;as
+        is&rdquo;, without warranty of any kind, express or implied, including but not limited to
+        the warranties of merchantability, fitness for a particular purpose and non-infringement.
+        In no event shall the author be liable for any claim, damages or other liability arising
+        from, out of or in connection with the software or its use.</p>
+      <p>PDF generation uses <a href="https://github.com/parallax/jsPDF" rel="noopener"
+        target="_blank">jsPDF</a>, bundled under the MIT licence.</p>
+
+      <h3>Sources</h3>
+      <p>The medication list is a user-supplied list of common pre-hospital medicines. The legal
+        category suggestions were informed by the Journal of Paramedic Practice article
+        <em>Paramedics and medicines: legal considerations</em>, NHS Specialist Pharmacy Service
+        guidance on legal mechanisms to supply and administer medicines, HCPC guidance on sale,
+        supply and administration, and Schedules 17 and 19 of the Human Medicines Regulations
+        2012. None of these is a substitute for the legislation itself, and the primary text was
+        not reachable when the list was compiled, so the categories are unverified against it.</p>
+    </div>
+  </details>
+  <p class="foot-credit">
+    Made by Finlay Russell &mdash;
+    <a href="mailto:finlay3110@gmail.com">finlay3110@gmail.com</a><br>
+    Runs entirely in your browser &middot; PDF by jsPDF
+  </p>
+</footer>
 
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="expiry.js"></script>
