@@ -171,6 +171,61 @@ async function capture(browser) {
     return window.DrugBagPDF.build(Object.assign({}, st.docs.cd.setup,
       { medications: st.docs.cd.medications, mode: "cd" })).output("datauristring");
   })).split(",")[1], "base64"));
+
+  // ---- drug matrix ----
+  await page.click('[data-tab="setup"]');
+  await page.check('input[name=docMode][value=matrix]');
+  await page.fill("#companyName", "Northern Event Medical Ltd");
+  await page.fill("#companyPhone", "01234 567890");
+  await page.setInputFiles("#logoFile", logo);
+  await page.waitForFunction(() => !document.getElementById("logoPreview").hidden);
+  await page.fill("#bagNumber", "2026-v1");
+  await page.fill("#preppedBy", "Dr A. Shah");
+  await page.fill("#checkedBy", "F. Smith");
+  await page.fill("#inServiceUntil", "2027-04-01");
+  await blur();
+  await shot(page.locator("#gradesCard"), "matrix-grades");
+
+  await page.click('[data-tab="meds"]');
+  const formulary = [
+    ["paracetamol tablet", "Mild to moderate pain, or a high temperature.\n" +
+                           "Check what the patient has already taken today."],
+    ["glucose gel", "Hypoglycaemia in a patient who can swallow safely."],
+    ["aspirin", "Suspected heart attack, once bleeding risk is considered."],
+    ["salbutamol neb", "Wheeze from asthma or COPD."],
+    ["adrenaline anaphylaxis", "Anaphylaxis."],
+    ["naloxone 2mg pre", "Respiratory depression from opioids."]
+  ];
+  for (const [query, indication] of formulary) {
+    await page.fill("#quickAdd", query);
+    await page.waitForSelector("#quickResults li");
+    await page.click("#quickResults li:first-child");
+    await page.fill("#mIndication", indication);
+    await page.click("#medSubmit");
+  }
+  await blur();
+  await shot(page.locator("#panel-meds .card").nth(1), "matrix-form");
+
+  // Fill the rows the way the guide describes it: whole rows for the two any
+  // grade may give, then "this grade and above" for the rest.
+  await page.click('#matrixTable tr:nth-child(2) .m-row');
+  await page.click('#matrixTable tr:nth-child(3) .m-row');
+  await page.check('input[name=fillMode][value=up]');
+  await page.click('#matrixTable tr:nth-child(4) td:nth-child(3) .m-cell');
+  await page.click('#matrixTable tr:nth-child(5) td:nth-child(3) .m-cell');
+  await page.click('#matrixTable tr:nth-child(6) td:nth-child(5) .m-cell');
+  await page.click('#matrixTable tr:nth-child(7) td:nth-child(9) .m-cell');
+  await blur();
+  await shot(page.locator("#matrixCard"), "matrix-grid");
+
+  await page.click('[data-tab="generate"]');
+  const matrixPdf = path.join(BUILD, "sample-matrix.pdf");
+  fs.writeFileSync(matrixPdf, Buffer.from((await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    return window.DrugBagPDF.build(Object.assign({}, st.docs.matrix.setup,
+      { medications: st.docs.matrix.medications, grades: st.docs.matrix.grades,
+        mode: "matrix" })).output("datauristring");
+  })).split(",")[1], "base64"));
   await page.close();
 
   // ---- dark mode and phone ----
@@ -192,7 +247,7 @@ async function capture(browser) {
   await shot(phone, "phone");
   await phone.close();
 
-  return { bagPdf, cdPdf };
+  return { bagPdf, cdPdf, matrixPdf };
 }
 
 function renderPdfPages(pdfs) {
@@ -202,7 +257,8 @@ function renderPdfPages(pdfs) {
     pdfs.cdPdf, "0", "pdf-cd-front",
     pdfs.cdPdf, "1", "pdf-cd-register",
     pdfs.cdPdf, "-2", "pdf-cd-stockcheck",
-    pdfs.cdPdf, "-1", "pdf-cd-signout"];
+    pdfs.cdPdf, "-1", "pdf-cd-signout",
+    pdfs.matrixPdf, "0", "pdf-matrix"];
   try {
     execFileSync("python3", args, { stdio: "inherit" });
     return true;

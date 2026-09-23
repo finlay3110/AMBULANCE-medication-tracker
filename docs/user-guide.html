@@ -40,6 +40,8 @@
   .narrow { max-width: 62%; margin-left: auto; margin-right: auto; }
   /* Landscape figures: shorter so a pair still shares a page with its text. */
   .compact img { max-height: 104mm; }
+  /* Tall portrait cards: capped so text still shares the page with them. */
+  .tall img { max-height: 132mm; }
 
   /* cover */
   /* Flows from the top: centring it clipped the content when it grew. */
@@ -92,9 +94,9 @@
 <div class="page cover">
   <div class="mark">+</div>
   <h1>Drug Bag Tracker</h1>
-  <p class="sub">Preparing drug bag labels, usage logs and controlled drugs registers</p>
+  <p class="sub">Preparing drug bag labels, usage logs, controlled drugs registers and drug matrices</p>
   <dl>
-    <dt>Guide for</dt><dd>Anyone preparing or checking a drug bag or CD safe</dd>
+    <dt>Guide for</dt><dd>Anyone preparing or checking a drug bag, a CD safe or a formulary</dd>
     <dt>Made by</dt><dd>Finlay Russell &mdash; finlay3110@gmail.com</dd>
     <dt>Licence</dt><dd>MIT &mdash; provided as is, with no warranty</dd>
   </dl>
@@ -114,11 +116,12 @@
     <li><span>5. Generating the document</span></li>
     <li><span>6. What the drug bag PDF contains</span></li>
     <li><span>7. What the CD register contains</span></li>
-    <li><span>8. Legal categories</span></li>
-    <li><span>9. Saving, reusing and backing up</span></li>
-    <li><span>10. Dark mode and phones</span></li>
-    <li><span>11. Troubleshooting</span></li>
-    <li><span>12. Disclaimer, licence and sources</span></li>
+    <li><span>8. The drug matrix</span></li>
+    <li><span>9. Legal categories</span></li>
+    <li><span>10. Saving, reusing and backing up</span></li>
+    <li><span>11. Dark mode and phones</span></li>
+    <li><span>12. Troubleshooting</span></li>
+    <li><span>13. Disclaimer, licence and sources</span></li>
   </ul>
 </div>
 
@@ -126,7 +129,7 @@
 <div class="page">
   <section>
     <h2>1. What it does</h2>
-    <p>Drug Bag Tracker turns a list of what you hold into printable A4 paperwork. It makes two
+    <p>Drug Bag Tracker turns a list of what you hold into printable A4 paperwork. It makes three
       separate documents:</p>
     <ul>
       <li><strong>A drug bag</strong> &mdash; a contents label for the outside of the bag, then a
@@ -134,10 +137,13 @@
       <li><strong>A controlled drugs register</strong> &mdash; a front sheet for the safe, a
         running-balance register page for each drug, a stock check record, and a sign-out sheet
         for stock taken from the safe into a personal pouch.</li>
+      <li><strong>A drug matrix</strong> &mdash; a colour-coded landscape table of which clinical
+        grades may give which medication, with a key to the column headings and an approval
+        block.</li>
     </ul>
     <p>Controlled drugs are held in the CD safe, not in a drug bag, so the two are kept completely
-      apart. Each keeps its own details and its own list, and you can prepare both without them
-      mixing.</p>
+      apart. Each of the three keeps its own details and its own list, and you can prepare all of
+      them in one sitting without them mixing.</p>
     <p>Everything runs in your browser. Nothing is uploaded, nothing is sent anywhere, and it works
       with no internet connection once the page is open.</p>
   </section>
@@ -155,7 +161,7 @@
     <div class="callout info">
       <p><strong>Your work is saved as you type</strong>, in this browser, on this device. It is
         not a backup: clearing site data, a private window, or a different computer will not have
-        it. Section 9 covers keeping a copy properly.</p>
+        it. Section 10 covers keeping a copy properly.</p>
     </div>
   </section>
 </div>
@@ -170,10 +176,14 @@
     </figure>
 
     <h3>Document type</h3>
-    <p>Pick <strong>Drug bag</strong> or <strong>Controlled drugs (CD safe)</strong> first &mdash;
-      it changes the rest of the form and the document you get at the end. Switching between them
-      does not disturb the other one, so you can prepare both in one sitting. The whole interface
-      turns dark red on the CD side so you can tell at a glance which you are editing.</p>
+    <p>Pick <strong>Drug bag</strong>, <strong>Controlled drugs (CD safe)</strong> or
+      <strong>Drug matrix</strong> first &mdash; it changes the rest of the form and the document
+      you get at the end. Switching between them does not disturb the others, so you can prepare
+      all three in one sitting. The interface turns dark red on the CD side and blue on the matrix
+      side, so you can tell at a glance which you are editing.</p>
+    <p>On the matrix side the details card asks for a formulary reference, who approved it, who
+      checked it and when it is due for review, and a <strong>Clinical grades</strong> card appears
+      beneath it. Section 8 covers both.</p>
 
     <h3>Start from a saved file</h3>
     <p>If you exported a bag or register before, load it here and update the batch numbers and
@@ -388,10 +398,105 @@
   </section>
 </div>
 
+<!-- ============================ 8. DRUG MATRIX ============================ -->
+<div class="page">
+  <section>
+    <h2>8. The drug matrix</h2>
+    <p>A drug matrix &mdash; a formulary &mdash; sets out which clinical grades may give which
+      medication. It records no batches, expiry dates or quantities, because it describes what is
+      allowed rather than what is held.</p>
+
+    <h3>Your clinical grades</h3>
+    <figure class="tall">
+      <img src="build/shots/matrix-grades.png" alt="The clinical grades card">
+      <figcaption>The clinical grades card, on the setup tab.</figcaption>
+    </figure>
+    <p>The list starts with a common set &mdash; first responder, FREC 3, emergency care assistant,
+      FREC 4, AAP, EMT, FREUC 5, paramedic, APP, nurse, doctor &mdash; but organisations differ, so
+      it is only a starting point. <strong>Rename</strong> any grade, <strong>reorder</strong> them
+      with the arrows, <strong>remove</strong> the ones you do not use, and <strong>Add grade</strong>
+      for the ones you do. <strong>Restore the default list</strong> puts the original set back.</p>
+    <p>Each grade has a full name and a short label. The short label is what fits in the column
+      heading; the full name is printed in the key underneath the table, so an abbreviation never
+      has to be guessed at.</p>
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <div class="callout info">
+      <p><strong>Order matters.</strong> The grades appear left to right in the order you list them,
+        so putting them in order of scope of practice is what makes the &ldquo;this grade and
+        above&rdquo; fill below do something sensible. Removing a grade also clears everything
+        ticked against it, and you are asked to confirm first.</p>
+    </div>
+
+    <h3>Adding the medications</h3>
+    <figure>
+      <img src="build/shots/matrix-form.png" alt="The matrix medication form">
+      <figcaption>The medication form on the matrix side: an indication instead of batch, expiry
+        and quantity.</figcaption>
+    </figure>
+    <p>Quick add works exactly as it does elsewhere, filling in the name, formulation, strength and
+      suggested legal category. In place of the batch, expiry and quantity you get an
+      <strong>Indication</strong> box &mdash; what the medication is given for. Put each indication
+      on its own line and it prints as a bulleted list in the table.</p>
+
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <h3>Ticking who can give what</h3>
+    <figure>
+      <img src="build/shots/matrix-grid.png" alt="The matrix grid">
+      <figcaption>The grid. Green is allowed, red is not.</figcaption>
+    </figure>
+    <p>Click any cell to change it. Rather than clicking every cell one at a time, use the fill
+      modes above the grid:</p>
+    <ul>
+      <li><strong>Toggle one</strong> &mdash; a click flips that single cell.</li>
+      <li><strong>This grade and above</strong> &mdash; a click allows that grade and everything to
+        its right, and clears everything to its left. This is the quick way to say &ldquo;paramedic
+        and up&rdquo;.</li>
+      <li><strong>This grade and below</strong> &mdash; the same in the other direction.</li>
+    </ul>
+    <p>Clicking a <strong>medication name</strong> fills or clears its whole row, and clicking a
+      <strong>grade heading</strong> fills or clears that whole column. A drug everyone carries is
+      therefore one click, not eleven.</p>
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <h3>What the matrix PDF contains</h3>
+    <figure class="compact">
+      <img src="build/shots/pdf-matrix.png" alt="The generated drug matrix">
+      <figcaption>The generated matrix, A4 landscape.</figcaption>
+    </figure>
+    <p>Medication name, indication, formulation and strength run down the left, then one column per
+      grade, green for allowed and red for not. Underneath sit the <strong>key to the
+      columns</strong> and a <strong>formulary approval</strong> block for the approver and checker
+      to sign and date.</p>
+    <p>The banner carries your formulary reference, the approval date and the review date, so an
+      out-of-date copy on a wall is obvious. If you have more grades than fit across one sheet, the
+      table continues onto further sheets with the medication columns repeated and the banner
+      saying which grades are on which sheet &mdash; for example &ldquo;Grades 1&ndash;15 of
+      24&rdquo;.</p>
+    <div class="callout stop">
+      <p><strong>A matrix is a local governance document.</strong> What any individual may
+        administer depends on their registration, their scope of practice, their employer's
+        policy, any patient group direction or written instruction in force, and current
+        legislation. This tool prints what you tick. Have the matrix approved by whoever is
+        clinically accountable in your organisation before it is used.</p>
+    </div>
+  </section>
+</div>
+
 <!-- ============================ 8. CATEGORIES ============================ -->
 <div class="page">
   <section>
-    <h2>8. Legal categories</h2>
+    <h2>9. Legal categories</h2>
     <table>
       <tr><th style="width:22mm">Category</th><th>Meaning</th></tr>
       <tr><td><span class="tag GSL">GSL</span></td><td>General sales list</td></tr>
@@ -421,7 +526,7 @@
 <!-- ============================ 9. SAVING ============================ -->
 <div class="page">
   <section>
-    <h2>9. Saving, reusing and backing up</h2>
+    <h2>10. Saving, reusing and backing up</h2>
     <h3>The two file types</h3>
     <table>
       <tr><th style="width:38mm">File</th><th>What it is for</th></tr>
@@ -454,7 +559,7 @@
 <!-- ============================ 10 & 11 ============================ -->
 <div class="page">
   <section>
-    <h2>10. Dark mode and phones</h2>
+    <h2>11. Dark mode and phones</h2>
     <div class="two">
       <figure>
         <img src="build/shots/dark.png" alt="Dark mode">
@@ -472,7 +577,7 @@
   </section>
 
   <section>
-    <h2>11. Troubleshooting</h2>
+    <h2>12. Troubleshooting</h2>
     <h4>&ldquo;Complete the setup tab first&rdquo;</h4>
     <p>Something required is empty. The message names each missing field. If you ticked CQC
       registered, the registration number is required too.</p>
@@ -503,7 +608,7 @@
 <!-- ============================ 12. LEGAL ============================ -->
 <div class="page">
   <section>
-    <h2>12. Disclaimer, licence and sources</h2>
+    <h2>13. Disclaimer, licence and sources</h2>
 
     <h3>Disclaimer</h3>
     <p>Drug Bag Tracker is a document generator, not a clinical, pharmaceutical or legal reference.
