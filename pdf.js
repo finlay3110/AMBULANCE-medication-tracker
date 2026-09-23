@@ -979,11 +979,26 @@
     var header = ["Medication name", "Indication", "Formulation(s)", "Strength"]
       .concat(list.map(function (g) { return txt(g.abbr) || txt(g.name); }));
 
+    /* A column heading is unreadable once it wraps mid-word ("FREU" / "C 5"),
+       so shrink the heading until each word fits the column instead. */
+    function headingSize(text, width) {
+      var words = String(text).split(/\s+/);
+      for (var size = 7.5; size > 5; size -= 0.5) {
+        setFont(doc, size, "bold");
+        var fits = words.every(function (w) {
+          return doc.getTextWidth(w) <= width - 3.8;
+        });
+        if (fits) return size;
+      }
+      return 5;
+    }
+
     function headerRow(y) {
       return drawRow(doc, PAGE.ml, y, widths, header.map(function (h, i) {
         return {
           text: h, bold: true, fill: MATRIX_BG, colour: [255, 255, 255],
-          size: i < 4 ? 8.5 : 7.5, align: i < 4 ? "left" : "center"
+          size: i < 4 ? 8.5 : headingSize(h, gradeW),
+          align: i < 4 ? "left" : "center"
         };
       }), { minH: 9 });
     }
