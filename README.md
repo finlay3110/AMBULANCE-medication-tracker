@@ -12,7 +12,8 @@ A browser-based tool for ambulance and event-medical companies to produce
 medication records as A4 PDFs. It makes two separate documents:
 
 - a **drug bag** label and usage log, and
-- a **controlled drugs register** for stock held in the CD safe.
+- a **controlled drugs register** for stock held in the CD safe, and
+- a **drug matrix**: which clinical grades may give which medication.
 
 Controlled drugs are never carried in the drug bag, so the two are kept
 completely apart: each has its own details, its own list and its own export.
@@ -71,6 +72,30 @@ used.
 Controlled drugs in the catalogue are offered only on a CD register. Searching
 for one on a drug bag says so and points at the other document rather than
 letting it be added.
+
+### The drug matrix
+
+A formulary: one row per medication, one column per clinical grade, every cell
+either allowed or not. It produces a colour-coded landscape table with a green
+tick or a red cross in each cell.
+
+**Grades are yours.** A default list is offered — first responder, FREC 3,
+emergency care assistant, FREC 4, AAP, EMT, FREUC 5, paramedic, APP, nurse,
+doctor — but organisations differ, so every grade can be renamed, reordered,
+removed, or added to, and the whole list can be replaced. Each carries a full
+name and a short label: the short label is the column heading, and the full name
+is printed in a key beneath the table so an abbreviation is never ambiguous.
+
+**Filling it in.** Click a cell to toggle it, a medication name to fill its row,
+or a column heading to fill that column. Because formularies are usually written
+as "paramedic and above", the click mode can be switched to **this grade and
+above** (or below), so one click sets the whole run and clears the rest.
+
+Medications here record what may be given rather than what is held, so they take
+an indication — one per line becomes a bulleted list — instead of a batch,
+expiry and quantity. More grades than fit across one sheet continue on further
+sheets, with the medication columns repeated and the heading saying which grades
+they cover.
 
 ### Company profile
 

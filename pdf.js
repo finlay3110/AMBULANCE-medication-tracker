@@ -111,6 +111,10 @@
     return data.mode === "cd";
   }
 
+  function isMatrixDoc(data) {
+    return data.mode === "matrix";
+  }
+
   /* Company name, with the CQC registration beside it when there is one. */
   function companyLine(data) {
     var name = txt(data.companyName);
@@ -316,7 +320,7 @@
    */
   function stampFooters(doc, data, state) {
     var total = doc.internal.getNumberOfPages();
-    var left = (isCdDoc(data) ? "CD safe " : "Bag ") +
+    var left = (isMatrixDoc(data) ? "Drug matrix " : isCdDoc(data) ? "CD safe " : "Bag ") +
       (txt(data.bagNumber) || "\u2014") + "  \u00b7  " + txt(data.companyName);
     var generated = stamp();
 
@@ -884,6 +888,271 @@
 
   }
 
+
+  /* ------------------------------------------------------------------ */
+  /* Drug matrix: who may give what, as a colour-coded landscape table   */
+  /* ------------------------------------------------------------------ */
+
+  var MATRIX_BG = [31, 78, 145];        // heading band
+  var YES_BG = [122, 201, 94];
+  var NO_BG = [227, 66, 52];
+
+  /*
+   * Drawn rather than typed: the standard PDF fonts have no tick or cross, so
+   * a glyph would come out as a substituted character on some viewers.
+   */
+  function drawTick(doc, cx, cy, size) {
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(size * 0.16);
+    doc.lines([[size * 0.32, size * 0.36], [size * 0.62, -size * 0.78]],
+      cx - size * 0.44, cy + size * 0.04);
+  }
+
+  function drawCross(doc, cx, cy, size) {
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(size * 0.17);
+    var r = size * 0.33;
+    doc.line(cx - r, cy - r, cx + r, cy + r);
+    doc.line(cx + r, cy - r, cx - r, cy + r);
+  }
+
+  function gradeAllows(med, grade) {
+    return !!(med.allow && med.allow[grade.id]);
+  }
+
+  /* Indications are entered one per line and printed as a bulleted list. */
+  function indicationLines(doc, med, width) {
+    var raw = txt(med.indication);
+    if (!raw) return [""];
+    var parts = raw.split(/\r?\n/).map(function (p) { return p.trim(); })
+      .filter(function (p) { return p; });
+    if (parts.length <= 1) return wrap(doc, parts[0] || "", width);
+    var out = [];
+    parts.forEach(function (p) {
+      wrap(doc, "\u2022 " + p, width).forEach(function (line) { out.push(line); });
+    });
+    return out;
+  }
+
+  var MATRIX_MIN_GRADE_W = 9;      // mm, the narrowest a tick still reads at
+  var MATRIX_MIN_INDICATION_W = 42;
+
+  /* How many grade columns fit beside the information columns on one sheet. */
+  function gradesPerSheet(contentW, fixed) {
+    return Math.max(1, Math.floor(
+      (contentW - fixed - MATRIX_MIN_INDICATION_W) / MATRIX_MIN_GRADE_W));
+  }
+
+  function drawMatrix(doc, data, state) {
+    var contentW = PAGE.h - PAGE.ml - PAGE.mr;   // landscape
+    var all = (data.grades || []).filter(function (g) { return txt(g.name); });
+    var fixed = 46 + 27 + 20;
+    var per = gradesPerSheet(contentW, fixed);
+
+    if (!all.length) {
+      drawMatrixSheet(doc, data, state, [], 0, 0);
+      return;
+    }
+    // Too many grades for one sheet: repeat the medication columns and carry on.
+    for (var i = 0; i < all.length; i += per) {
+      drawMatrixSheet(doc, data, state, all.slice(i, i + per), i, all.length);
+    }
+  }
+
+  function drawMatrixSheet(doc, data, state, list, offset, total) {
+    var W = PAGE.h, H = PAGE.w;                 // landscape
+    var contentW = W - PAGE.ml - PAGE.mr;
+    var rowMin = 9;
+
+    // Information columns are fixed; the grade columns share what is left, and
+    // any slack goes back to the indication, which is always the hungriest.
+    var nameW = 46, formW = 27, strengthW = 20;
+    var fixed = nameW + formW + strengthW;
+    var gradeW = list.length
+      ? Math.max(MATRIX_MIN_GRADE_W,
+          Math.min(20, (contentW - fixed - MATRIX_MIN_INDICATION_W) / list.length))
+      : 0;
+    var indicationW = contentW - fixed - gradeW * list.length;
+
+    var widths = [nameW, indicationW, formW, strengthW]
+      .concat(list.map(function () { return gradeW; }));
+    var header = ["Medication name", "Indication", "Formulation(s)", "Strength"]
+      .concat(list.map(function (g) { return txt(g.abbr) || txt(g.name); }));
+
+    function headerRow(y) {
+      return drawRow(doc, PAGE.ml, y, widths, header.map(function (h, i) {
+        return {
+          text: h, bold: true, fill: MATRIX_BG, colour: [255, 255, 255],
+          size: i < 4 ? 8.5 : 7.5, align: i < 4 ? "left" : "center"
+        };
+      }), { minH: 9 });
+    }
+
+    function banner(y) {
+      doc.setFillColor(MATRIX_BG[0], MATRIX_BG[1], MATRIX_BG[2]);
+      doc.rect(PAGE.ml, y, contentW, 15, "F");
+      var logoW = drawLogo(doc, data, PAGE.ml + 2.5, y + 2.5, 22, 10);
+      var textX = PAGE.ml + 4 + (logoW ? logoW + 3 : 0);
+      doc.setTextColor(255, 255, 255);
+      setFont(doc, 12, "bold");
+      doc.text("DRUG MATRIX", textX, y + 7);
+      setFont(doc, 8.5, "normal");
+      doc.text(companyLine(data), textX, y + 12);
+
+      setFont(doc, 8, "normal");
+      var right = [];
+      if (txt(data.bagNumber)) right.push("Ref " + txt(data.bagNumber));
+      if (txt(data.preppedDate)) right.push("Approved " + txt(data.preppedDate));
+      if (txt(data.inServiceUntil)) right.push("Review " + serviceDate(data));
+      if (total > list.length) {
+        right.push("Grades " + (offset + 1) + "\u2013" + (offset + list.length) +
+          " of " + total);
+      }
+      doc.text(right.join("   \u00b7   "), W - PAGE.mr - 4, y + 9, { align: "right" });
+      doc.setTextColor(INK[0], INK[1], INK[2]);
+      return y + 15 + 4;
+    }
+
+    var y = 0;
+    function newSheet() {
+      addPage(doc, state, true);
+      y = banner(PAGE.mt);
+      y += headerRow(y);
+    }
+
+    newSheet();
+    var usable = H - PAGE.mb - (PAGE.mt + 15 + 4 + 9);
+    data.medications.forEach(function (m) {
+      // Measure first, so a tall row moves to the next sheet whole.
+      setFont(doc, 8.5, "normal");
+      var lines = indicationLines(doc, m, indicationW - 3.6);
+      // An indication longer than a whole sheet is trimmed rather than left to
+      // run off the bottom; the app warns nothing is silently lost.
+      var maxLines = Math.max(1, Math.floor((usable - 3.2) / (8.5 * 0.3528 * 1.15)));
+      if (lines.length > maxLines) {
+        lines = lines.slice(0, maxLines - 1).concat(["\u2026"]);
+      }
+      var needed = Math.max(rowMin, linesHeight(lines, 8.5) + 3.2,
+        linesHeight(wrap(doc, txt(m.name), nameW - 3.6), 8.5) + 3.2);
+      if (y + needed > H - PAGE.mb) newSheet();
+
+      var cells = [
+        { text: m.name, size: 8.5 },
+        { text: lines.join("\n"), size: 8.5 },
+        { text: m.presentation, size: 8.5 },
+        { text: m.dose, size: 8.5, align: "center" }
+      ].concat(list.map(function (g) {
+        return { text: "", fill: gradeAllows(m, g) ? YES_BG : NO_BG };
+      }));
+
+      var h = drawRow(doc, PAGE.ml, y, widths, cells, { minH: rowMin });
+
+      // Marks go on afterwards: drawRow paints the fills they sit on.
+      var cx = PAGE.ml + nameW + indicationW + formW + strengthW;
+      list.forEach(function (g) {
+        var mid = cx + gradeW / 2;
+        if (gradeAllows(m, g)) drawTick(doc, mid, y + h / 2, 3.4);
+        else drawCross(doc, mid, y + h / 2, 3.4);
+        cx += gradeW;
+      });
+      y += h;
+    });
+
+    drawMatrixKey(doc, data, state, list, H, contentW, y, banner);
+  }
+
+  /*
+   * Column headings are abbreviated to fit, so the full grade names are spelled
+   * out underneath. Without this the table is unreadable to anyone who did not
+   * write it.
+   */
+  function drawMatrixKey(doc, data, state, list, H, contentW, y, banner) {
+    var entries = list.map(function (g) {
+      var abbr = txt(g.abbr) || txt(g.name);
+      return abbr === txt(g.name) ? abbr : abbr + " = " + txt(g.name);
+    });
+    setFont(doc, 8, "normal");
+    // Packed entry by entry rather than wrapped as one string, so a grade name
+    // is never split across two lines mid-phrase.
+    var lines = [];
+    var line = "";
+    entries.forEach(function (entry) {
+      var candidate = line ? line + "      " + entry : entry;
+      if (line && doc.getTextWidth(candidate) > contentW - 8) {
+        lines.push(line);
+        line = entry;
+      } else {
+        line = candidate;
+      }
+    });
+    if (line) lines.push(line);
+    var keyH = linesHeight(lines, 8) + 11;
+
+    // Key and approval block travel together; move both rather than split them.
+    if (y + 6 + keyH + 6 + 24 > H - PAGE.mb) {
+      addPage(doc, state, true);
+      y = banner(PAGE.mt);
+    } else {
+      y += 6;
+    }
+
+    doc.setFillColor(SOFT_BG[0], SOFT_BG[1], SOFT_BG[2]);
+    doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+    doc.setLineWidth(0.2);
+    doc.rect(PAGE.ml, y, contentW, keyH, "FD");
+    setFont(doc, 8, "bold");
+    doc.setTextColor(60, 72, 86);
+    doc.text("KEY TO COLUMNS", PAGE.ml + 4, y + 5);
+    setFont(doc, 8, "normal");
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text(lines, PAGE.ml + 4, y + 9.5);
+
+    drawApprovalBlock(doc, data, y + keyH + 6, contentW);
+  }
+
+  /* Approval signatures, in the landscape width. */
+  function drawApprovalBlock(doc, data, y, contentW) {
+    var h = 24;
+    var halfW = contentW / 2;
+    doc.setFillColor(SOFT_BG[0], SOFT_BG[1], SOFT_BG[2]);
+    doc.rect(PAGE.ml, y, contentW, 6.5, "F");
+    doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+    doc.setLineWidth(0.2);
+    doc.rect(PAGE.ml, y, contentW, h, "S");
+    doc.line(PAGE.ml, y + 6.5, PAGE.ml + contentW, y + 6.5);
+    doc.line(PAGE.ml + halfW, y + 6.5, PAGE.ml + halfW, y + h);
+
+    setFont(doc, 8, "bold");
+    doc.setTextColor(60, 72, 86);
+    doc.text("FORMULARY APPROVAL", PAGE.ml + 3, y + 4.6);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+
+    [["APPROVED BY", txt(data.preppedBy), txt(data.preppedDate), PAGE.ml],
+     ["CHECKED BY", txt(data.checkedBy), "", PAGE.ml + halfW]].forEach(function (col) {
+      var cx = col[3];
+      setFont(doc, 7, "bold");
+      doc.setTextColor(95, 105, 118);
+      doc.text(col[0], cx + 3, y + 11);
+      doc.setTextColor(INK[0], INK[1], INK[2]);
+      [["Name", col[1], 15.5], ["Signature", "", 20], ["Date", col[2], 15.5]]
+        .forEach(function (row, i) {
+          var rx = cx + (i === 2 ? halfW / 2 : 0);
+          var rw = i === 2 ? halfW / 2 : halfW / 2;
+          setFont(doc, 7.5, "normal");
+          doc.setTextColor(95, 105, 118);
+          doc.text(row[0], rx + 3, y + row[2]);
+          doc.setTextColor(INK[0], INK[1], INK[2]);
+          doc.setDrawColor(160, 168, 178);
+          doc.setLineWidth(0.15);
+          doc.line(rx + 18, y + row[2] + 1, rx + rw - 3, y + row[2] + 1);
+          if (row[1]) {
+            setFont(doc, 8.5, "bold");
+            doc.text(wrap(doc, row[1], rw - 24)[0], rx + 19, y + row[2]);
+          }
+        });
+    });
+  }
+
   /* ------------------------------------------------------------------ */
 
   function build(data) {
@@ -892,16 +1161,30 @@
 
     var doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
     doc.setProperties({
-      title: isCdDoc(data)
-        ? "Controlled drugs register — safe " + txt(data.bagNumber)
-        : "Drug bag " + txt(data.bagNumber) + " — medication log",
-      subject: isCdDoc(data) ? "Controlled drugs register" : "Medication tracking document",
+      title: isMatrixDoc(data)
+        ? "Drug matrix " + txt(data.bagNumber)
+        : isCdDoc(data)
+          ? "Controlled drugs register — safe " + txt(data.bagNumber)
+          : "Drug bag " + txt(data.bagNumber) + " — medication log",
+      subject: isMatrixDoc(data)
+        ? "Drug matrix / formulary"
+        : isCdDoc(data) ? "Controlled drugs register" : "Medication tracking document",
       author: txt(data.companyName),
       creator: "Drug Bag Tracker"
     });
 
     var state = { page: 1, sizes: { 1: { w: PAGE.w, h: PAGE.h } } };
-    if (isCdDoc(data)) {
+    if (isMatrixDoc(data)) {
+      // The matrix is landscape throughout, so the portrait first page that
+      // jsPDF opens with is discarded once the first sheet exists.
+      drawMatrix(doc, data, state);
+      doc.deletePage(1);
+      var shifted = {};
+      Object.keys(state.sizes).forEach(function (k) {
+        if (Number(k) > 1) shifted[Number(k) - 1] = state.sizes[k];
+      });
+      state.sizes = shifted;
+    } else if (isCdDoc(data)) {
       drawCdCover(doc, data, state);
       data.medications.forEach(function (m) { drawCdLog(doc, data, m, state); });
       drawStockCheckSheets(doc, data, state);
@@ -916,10 +1199,11 @@
 
   function fileName(data) {
     var id = txt(data.bagNumber)
-      .replace(/^(cd\s*safe|safe|drug\s*bag|bag|db)[\s._-]*/i, "")
+      .replace(/^(formulary|cd\s*safe|safe|drug\s*bag|bag|db)[\s._-]*/i, "")
       .replace(/[^A-Za-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "unnumbered";
-    return (isCdDoc(data) ? "CD-Register-" : "Drug-Bag-") + id + ".pdf";
+    return (isMatrixDoc(data) ? "Formulary-"
+      : isCdDoc(data) ? "CD-Register-" : "Drug-Bag-") + id + ".pdf";
   }
 
   global.DrugBagPDF = {

@@ -483,3 +483,86 @@ body.cd-mode .mode:has(input:checked) { background: var(--cd-soft); }
 .check-row { display: flex; align-items: center; gap: 9px; cursor: pointer; }
 .check-row input { width: auto; flex: none; margin: 0; }
 .check-row span { font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+
+/* ---------- clinical grades ---------- */
+.grade-list { display: flex; flex-direction: column; gap: 8px; }
+.grade {
+  display: flex; align-items: flex-end; gap: 10px;
+  border: 1px solid var(--line); border-left: 5px solid var(--accent);
+  border-radius: 8px; padding: 9px 12px; background: var(--field-bg);
+}
+.grade-order {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--btn-bg); color: var(--btn-ink);
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; margin-bottom: 4px;
+}
+.grade-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.grade-field span { font-size: 11px; font-weight: 600; color: var(--muted); }
+.grade-name { flex: 2 1 0; }
+.grade-abbr { flex: 1 1 0; }
+.grade-btns { display: flex; gap: 6px; flex: none; }
+
+/* ---------- the matrix ---------- */
+.fill-modes { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+.fill-modes label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.fill-modes input { width: auto; flex: none; margin: 0; }
+#fillModeHint { margin-bottom: 12px; }
+
+.matrix-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table.matrix { border-collapse: collapse; width: max-content; min-width: 100%; }
+table.matrix th, table.matrix td {
+  border: 1px solid var(--line); padding: 0; text-align: center;
+}
+table.matrix th.m-med {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--card); text-align: left; min-width: 190px; max-width: 260px;
+  font-size: 13px; font-weight: 600;
+}
+table.matrix tr:first-child th { background: var(--soft-2); }
+table.matrix tr:first-child th.m-med { background: var(--soft-2); padding: 8px 10px; }
+.m-head, .m-row, .m-cell {
+  appearance: none; border: 0; cursor: pointer; font: inherit; width: 100%;
+}
+.m-head {
+  background: transparent; color: var(--ink-soft);
+  font-size: 11px; font-weight: 700; padding: 8px 6px; white-space: nowrap;
+}
+.m-head:hover { background: var(--soft); }
+.m-row {
+  background: transparent; color: var(--ink);
+  font-size: 13px; font-weight: 600; text-align: left; padding: 8px 10px;
+}
+.m-row:hover { background: var(--soft); }
+.m-cell {
+  min-width: 42px; height: 34px; color: #fff; font-size: 14px; font-weight: 700;
+}
+.m-cell.yes { background: #4f9e3c; }
+.m-cell.no { background: #c0392b; }
+.m-cell:hover { outline: 2px solid var(--ink); outline-offset: -3px; }
+
+/* A formulary is neither a bag nor a safe: give it its own colour. */
+body.matrix-mode {
+  --accent: #1f4e91; --accent-line: #1f4e91;
+  --btn-bg: #1f4e91; --btn-bg-hover: #17406f; --accent-soft: #eef3fa;
+}
+body.matrix-mode .cross { background: #1f4e91; }
+:root[data-theme="dark"] body.matrix-mode,
+body.matrix-mode { }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.matrix-mode {
+    --accent: #7fb0ea; --accent-line: #4a86cf;
+    --btn-bg: #2a5f9e; --btn-bg-hover: #356fb4; --accent-soft: #16233a;
+  }
+}
+:root[data-theme="dark"] body.matrix-mode {
+  --accent: #7fb0ea; --accent-line: #4a86cf;
+  --btn-bg: #2a5f9e; --btn-bg-hover: #356fb4; --accent-soft: #16233a;
+}
+
+@media (max-width: 700px) {
+  .grade { flex-wrap: wrap; }
+  .grade-name, .grade-abbr { flex: 1 1 100%; }
+  .grade-btns .icon-btn { flex: 1; }
+  .fill-modes { gap: 10px; }
+}
