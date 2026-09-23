@@ -979,25 +979,26 @@
     var header = ["Medication name", "Indication", "Formulation(s)", "Strength"]
       .concat(list.map(function (g) { return txt(g.abbr) || txt(g.name); }));
 
-    /* A column heading is unreadable once it wraps mid-word ("FREU" / "C 5"),
-       so shrink the heading until each word fits the column instead. */
-    function headingSize(text, width) {
+    /* Text is unreadable once it wraps mid-word ("FREU" / "C 5", or a strength
+       broken as "2.5mg/2.5m" / "l"), so shrink it until each word fits the
+       column instead. drawRow wraps at width - padX * 2. */
+    function fitSize(text, width, base, min, bold) {
       var words = String(text).split(/\s+/);
-      for (var size = 7.5; size > 5; size -= 0.5) {
-        setFont(doc, size, "bold");
+      for (var size = base; size > min; size -= 0.5) {
+        setFont(doc, size, bold ? "bold" : "normal");
         var fits = words.every(function (w) {
           return doc.getTextWidth(w) <= width - 3.8;
         });
         if (fits) return size;
       }
-      return 5;
+      return min;
     }
 
     function headerRow(y) {
       return drawRow(doc, PAGE.ml, y, widths, header.map(function (h, i) {
         return {
           text: h, bold: true, fill: MATRIX_BG, colour: [255, 255, 255],
-          size: i < 4 ? 8.5 : headingSize(h, gradeW),
+          size: i < 4 ? 8.5 : fitSize(h, gradeW, 7.5, 5, true),
           align: i < 4 ? "left" : "center"
         };
       }), { minH: 9 });
@@ -1055,7 +1056,7 @@
         { text: m.name, size: 8.5 },
         { text: lines.join("\n"), size: 8.5 },
         { text: m.presentation, size: 8.5 },
-        { text: m.dose, size: 8.5, align: "center" }
+        { text: m.dose, size: fitSize(txt(m.dose), strengthW, 8.5, 6), align: "center" }
       ].concat(list.map(function (g) {
         return { text: "", fill: gradeAllows(m, g) ? YES_BG : NO_BG };
       }));
