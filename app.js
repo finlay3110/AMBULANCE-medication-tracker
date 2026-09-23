@@ -180,6 +180,11 @@
 
   function words() { return WORDS[state.mode]; }
 
+  /* What to call the open document in a sentence. */
+  function docNoun() {
+    return isMatrixMode() ? "formulary" : isCdMode() ? "register" : "bag";
+  }
+
   /* Relabel a field and its placeholder. */
   function relabel(inputId, spec) {
     var input = $(inputId);
@@ -1315,7 +1320,9 @@
       meta.className = "med-meta";
       meta.textContent = isMatrixMode()
         ? m.presentation + " · " + m.dose + " · " +
-          (m.indication || "").split(/\n+/).filter(Boolean).join("; ")
+          (m.indication || "").split(/\n+/).map(function (line) {
+            return line.trim();
+          }).filter(Boolean).join(" \u2022 ")
         : m.presentation + " · " + m.dose + " · x" + m.doses +
           (isCdMode() ? " " + (m.unit || "held") : " dose" + (m.doses === 1 ? "" : "s")) +
           " · batch " + (m.batch || "—") +
@@ -1332,7 +1339,7 @@
        ["Edit", function () { startEdit(i); }, ""],
        ["Delete", function () {
           if (confirm("Remove " + m.name + " from this " +
-              (isMatrixMode() ? "formulary" : isCdMode() ? "register" : "bag") + "?")) {
+              docNoun() + "?")) {
             doc().medications.splice(i, 1);
             if (state.editing === i) clearMedForm();
             touch();
@@ -1425,7 +1432,7 @@
       var never = !(doc().meta || {}).exportedAt;
       backup.className = "notice warn";
       backup.textContent = never
-        ? "This " + (isCdMode() ? "register" : "bag") + " has never been exported. It lives only " +
+        ? "This " + docNoun() + " has never been exported. It lives only " +
           "in this browser, and clearing site data or using a private window will lose it \u2014 " +
           "export a copy to keep."
         : "Changed since the last export. Export again so your saved copy matches.";
@@ -1497,7 +1504,7 @@
   function showPdfReminder() {
     var box = $("pdfReminder");
     var text = $("pdfReminderText");
-    var what = isCdMode() ? "register" : "bag";
+    var what = docNoun();
     if (needsBackup()) {
       box.className = "notice warn reminder";
       text.textContent = "PDF downloaded. Save the .json copy too \u2014 a PDF cannot be loaded " +
@@ -1655,7 +1662,7 @@
         }
         if (attachFormulary(parsed, file.name)) {
           importMessage("good", "\u201c" + file.name + "\u201d is a formulary, so it has been " +
-            "attached to this " + (isCdMode() ? "register" : "bag") + " rather than replacing " +
+            "attached to this " + docNoun() + " rather than replacing " +
             "it. Its table is printed at the end of the document.");
         } else {
           hide("importResult", true);
