@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Drug Bag Tracker — user guide</title>
+<style>
+  @page { size: A4; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: #16202c; background: #fff;
+    font: 10.5pt/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h2 {
+    font-size: 17pt; margin: 0 0 4mm; padding-bottom: 2mm;
+    border-bottom: 2px solid #0b6b3a; color: #0b6b3a;
+  }
+  h3 { font-size: 12pt; margin: 6mm 0 2mm; }
+  h4 { font-size: 10.5pt; margin: 4mm 0 1mm; }
+  p, ul, ol { margin: 0 0 3mm; }
+  ul, ol { padding-left: 6mm; }
+  li { margin-bottom: 1.2mm; }
+  a { color: #0b6b3a; }
+  code { background: #eef2f6; padding: 0 1mm; border-radius: 2px; font-size: 9.5pt; }
+
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  section { page-break-inside: auto; }
+  h2, h3, h4 { page-break-after: avoid; }
+  figure { page-break-inside: avoid; margin: 3mm 0 5mm; }
+  /* Capped so a tall screenshot never outgrows the page it belongs on. */
+  figure img {
+    max-width: 100%; max-height: 168mm; width: auto; height: auto;
+    border: 1px solid #ccd4dc; border-radius: 3px; display: block; margin: 0 auto;
+  }
+  figure img.plain { border: 0; }
+  figcaption { font-size: 8.5pt; color: #5d6b7a; margin-top: 1.5mm; }
+  .two { display: flex; gap: 4mm; }
+  .two figure { flex: 1; margin-top: 0; }
+  .narrow { max-width: 62%; margin-left: auto; margin-right: auto; }
+  /* Landscape figures: shorter so a pair still shares a page with its text. */
+  .compact img { max-height: 104mm; }
+  /* Tall portrait cards: capped so text still shares the page with them. */
+  .tall img { max-height: 132mm; }
+
+  /* cover */
+  /* Flows from the top: centring it clipped the content when it grew. */
+  .cover { padding-top: 4mm; }
+  .cover .mark {
+    width: 22mm; height: 22mm; border-radius: 5mm; background: #0b6b3a; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30pt; font-weight: 700; margin-bottom: 8mm;
+  }
+  .cover h1 { font-size: 30pt; margin: 0 0 2mm; letter-spacing: -0.3pt; }
+  .cover .sub { font-size: 13pt; color: #5d6b7a; margin: 0 0 10mm; }
+  .cover dl { display: grid; grid-template-columns: 32mm 1fr; gap: 1.5mm 4mm; font-size: 10pt; margin: 0; }
+  .cover dt { color: #5d6b7a; }
+  .cover dd { margin: 0; font-weight: 600; }
+
+  .callout {
+    border: 1px solid #ecd396; background: #fdf3dd; color: #6f4a00;
+    border-radius: 3px; padding: 3.5mm 4mm; margin: 4mm 0;
+  }
+  .callout.stop { border-color: #f3c3c0; background: #fdeceb; color: #8f2a22; }
+  .callout.info { border-color: #cfd8e2; background: #f2f5f8; color: #2f4055; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout, table, .steps li { page-break-inside: avoid; }
+  .callout strong { color: inherit; }
+
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 4mm; font-size: 9.5pt; }
+  th, td { border: 1px solid #ccd4dc; padding: 2mm 2.5mm; text-align: left; vertical-align: top; }
+  th { background: #f2f5f8; }
+  .tag {
+    display: inline-block; padding: 0.4mm 2mm; border-radius: 2px;
+    color: #fff; font-weight: 700; font-size: 8.5pt;
+  }
+  .GSL { background: #4f8f3c; } .P { background: #9a6a00; } .POM { background: #4a5a6a; }
+  .S17 { background: #14459e; } .S19 { background: #0f6e78; } .CD { background: #8b1a1a; }
+
+  .steps { counter-reset: step; padding: 0; list-style: none; }
+  .steps li { counter-increment: step; position: relative; padding-left: 8mm; margin-bottom: 2.5mm; }
+  .steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0.3mm;
+    width: 5.5mm; height: 5.5mm; border-radius: 50%; background: #0b6b3a; color: #fff;
+    font-size: 8pt; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .toc { list-style: none; padding: 0; }
+  .toc li { border-bottom: 1px dotted #ccd4dc; padding: 1.8mm 0; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- ============================ COVER ============================ -->
+<div class="page cover">
+  <div class="mark">+</div>
+  <h1>Drug Bag Tracker</h1>
+  <p class="sub">Preparing drug bag labels, usage logs, controlled drugs registers and drug matrices</p>
+  <dl>
+    <dt>Guide for</dt><dd>Anyone preparing or checking a drug bag, a CD safe or a formulary</dd>
+    <dt>Made by</dt><dd>Finlay Russell &mdash; finlay3110@gmail.com</dd>
+    <dt>Licence</dt><dd>MIT &mdash; provided as is, with no warranty</dd>
+  </dl>
+
+  <div class="callout stop" style="margin-top:10mm">
+    <p><strong>Before you use anything this produces.</strong> This tool formats what you type. It
+    does not check it. You are responsible for verifying every entry &mdash; name, formulation,
+    strength, batch, expiry, quantity and legal category &mdash; against the stock actually held,
+    and against your own medicines policy, before a document goes into service.</p>
+  </div>
+
+  <ul class="toc" style="margin-top:9mm">
+    <li><span>1. What it does</span></li>
+    <li><span>2. Getting started</span></li>
+    <li><span>3. Setup</span></li>
+    <li><span>4. Adding medications</span></li>
+    <li><span>5. Generating the document</span></li>
+    <li><span>6. What the drug bag PDF contains</span></li>
+    <li><span>7. What the CD register contains</span></li>
+    <li><span>8. The drug matrix</span></li>
+    <li><span>9. Legal categories</span></li>
+    <li><span>10. Saving, reusing and backing up</span></li>
+    <li><span>11. Dark mode and phones</span></li>
+    <li><span>12. Troubleshooting</span></li>
+    <li><span>13. Disclaimer, licence and sources</span></li>
+  </ul>
+</div>
+
+<!-- ============================ 1 & 2 ============================ -->
+<div class="page">
+  <section>
+    <h2>1. What it does</h2>
+    <p>Drug Bag Tracker turns a list of what you hold into printable A4 paperwork. It makes three
+      separate documents:</p>
+    <ul>
+      <li><strong>A drug bag</strong> &mdash; a contents label for the outside of the bag, then a
+        numbered usage log for every medication so each dose can be signed out.</li>
+      <li><strong>A controlled drugs register</strong> &mdash; a front sheet for the safe, a
+        running-balance register page for each drug, a stock check record, and a sign-out sheet
+        for stock taken from the safe into a personal pouch.</li>
+      <li><strong>A drug matrix</strong> &mdash; a colour-coded landscape table of which clinical
+        grades may give which medication, with a key to the column headings and an approval
+        block.</li>
+    </ul>
+    <p>Controlled drugs are held in the CD safe, not in a drug bag, so the two are kept completely
+      apart. Each of the three keeps its own details and its own list, and you can prepare all of
+      them in one sitting without them mixing.</p>
+    <p>Everything runs in your browser. Nothing is uploaded, nothing is sent anywhere, and it works
+      with no internet connection once the page is open.</p>
+  </section>
+
+  <section>
+    <h2>2. Getting started</h2>
+    <p>Open <code>index.html</code> in a browser, or visit the address your organisation hosts it
+      at. There is nothing to install and no account to create.</p>
+    <p>Work runs left to right across three tabs:</p>
+    <ol class="steps">
+      <li><strong>Setup</strong> &mdash; who you are and which bag or safe this is.</li>
+      <li><strong>Medications</strong> &mdash; what is in it.</li>
+      <li><strong>Generate</strong> &mdash; download the PDF.</li>
+    </ol>
+    <div class="callout info">
+      <p><strong>Your work is saved as you type</strong>, in this browser, on this device. It is
+        not a backup: clearing site data, a private window, or a different computer will not have
+        it. Section 10 covers keeping a copy properly.</p>
+    </div>
+  </section>
+</div>
+
+<!-- ============================ 3. SETUP ============================ -->
+<div class="page">
+  <section>
+    <h2>3. Setup</h2>
+    <figure>
+      <img src="build/shots/setup.png" alt="The setup tab">
+      <figcaption>The setup tab, filled in for a drug bag.</figcaption>
+    </figure>
+
+    <h3>Document type</h3>
+    <p>Pick <strong>Drug bag</strong>, <strong>Controlled drugs (CD safe)</strong> or
+      <strong>Drug matrix</strong> first &mdash; it changes the rest of the form and the document
+      you get at the end. Switching between them does not disturb the others, so you can prepare
+      all three in one sitting. The interface turns dark red on the CD side and blue on the matrix
+      side, so you can tell at a glance which you are editing.</p>
+    <p>On the matrix side the details card asks for a formulary reference, who approved it, who
+      checked it and when it is due for review, and a <strong>Clinical grades</strong> card appears
+      beneath it. Section 8 covers both.</p>
+
+    <h3>Start from a saved file</h3>
+    <p>If you exported a bag or register before, load it here and update the batch numbers and
+      expiry dates. That is much the quickest way to prepare a repeat bag. The document type comes
+      from the file, so importing a register while you are on the bag side switches you over.</p>
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <h3>Company details</h3>
+    <figure>
+      <img src="build/shots/company-card.png" alt="Company details">
+      <figcaption>Company details, with the CQC toggle and the logo.</figcaption>
+    </figure>
+    <p>Name, contact number and address appear on the label and in the &ldquo;if found&rdquo;
+      notice. These are the same on every bag you ever make, so save them once with
+      <strong>Export company details</strong> and load them into anything new with
+      <strong>Import company details</strong>. The file carries the logo and CQC registration too,
+      and nothing about any particular bag.</p>
+    <p><strong>CQC registered</strong> is a toggle, because not every organisation is registered.
+      Tick it and a registration number is asked for; that number is then printed beside your
+      company name on the label and register front sheet. Leave it off and nothing about CQC
+      appears anywhere.</p>
+    <p><strong>Company logo</strong> takes a PNG or JPEG, drawn at the top of the label on a white
+      panel so a dark logo still reads. It is scaled down before being stored and travels with your
+      exports.</p>
+
+    <h3>Bag or safe details</h3>
+    <figure>
+      <img src="build/shots/bag-details.png" alt="Bag details">
+      <figcaption>Bag details. On a CD register these read safe reference, location and
+        accountable officer instead.</figcaption>
+    </figure>
+    <p><strong>In service until</strong> is worth understanding. Left blank, expiry is judged
+      against today. Set it to the date the bag is due back and expiry is judged against
+      <em>that</em> instead &mdash; so stock that is in date now but runs out while the bag is away
+      gets flagged, in the app and in a band on the label. It is the difference between &ldquo;is
+      this in date?&rdquo; and &ldquo;will it still be in date when this comes back?&rdquo;</p>
+  </section>
+</div>
+
+<!-- ============================ 4. MEDICATIONS ============================ -->
+<div class="page">
+  <section>
+    <h2>4. Adding medications</h2>
+
+    <h3>Quick add</h3>
+    <figure>
+      <img src="build/shots/quick-add.png" alt="Quick add search">
+      <figcaption>Searching the built-in list. Matching works across name, formulation and
+        strength together, so &ldquo;nalox 2mg&rdquo; and &ldquo;parac susp&rdquo; both find what
+        you meant.</figcaption>
+    </figure>
+    <p>Pick an entry and it fills the name, formulation, strength and a suggested legal category,
+      leaving you the batch, expiry and quantity. Everything stays editable afterwards.</p>
+    <p>Two options are always offered at the bottom of the list:</p>
+    <ul>
+      <li><strong>&mdash; other strength or formulation</strong> fills only the name, for when you
+        hold a different presentation from the one listed.</li>
+      <li><strong>Not on the list &mdash; enter it manually</strong> clears the form so you can
+        type anything at all. The list is a shortcut, never a restriction.</li>
+    </ul>
+
+    <figure class="narrow">
+      <img src="build/shots/quick-add-cd.png" alt="Searching for a controlled drug on a bag">
+      <figcaption>Controlled drugs are not offered on a drug bag. Searching for one tells you
+        where it belongs instead.</figcaption>
+    </figure>
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <h3>The form</h3>
+    <figure>
+      <img src="build/shots/med-form.png" alt="The medication form">
+      <figcaption>Batch, expiry and quantity are what you add after picking an entry.</figcaption>
+    </figure>
+
+    <h4>Expiry</h4>
+    <p>Most packs state a month, so the field is a month picker by default and treats the stock as
+      in date to the last day of that month. Switch it to <strong>Exact date</strong> for packs
+      that print a full one. The line underneath confirms how it was read before you add anything.</p>
+
+    <h4>Quantity</h4>
+    <p>The number of doses in the bag &mdash; that is how many numbered rows the usage log gets. On
+      a CD register this is the quantity held, and you also give a <strong>unit</strong>
+      (ampoules, ml, mg&hellip;) which is printed in the register's balance columns so a figure can
+      never be read as the wrong measure.</p>
+
+    <h4>More than one batch of the same drug</h4>
+    <p>Add it twice. Use the <strong>Copy</strong> button on an entry to prefill a new one with the
+      name, formulation and strength, then type the second batch, expiry and quantity. Each batch
+      gets its own log page &mdash; and for a controlled drug its own running balance, which is
+      what you want, since one balance cannot span two batches.</p>
+
+    <h3>The list</h3>
+    <figure>
+      <img src="build/shots/med-list.png" alt="The medication list">
+      <figcaption>Category, expiry flags and batch labels at a glance. Reorder with the arrows;
+        the order carries through to the printed document.</figcaption>
+    </figure>
+    <p>Red flags mean already expired, or expiring before the bag is due back. Amber means within
+      90 days. Both appear again on the generate tab and on the label itself.</p>
+  </section>
+</div>
+
+<!-- ============================ 5. GENERATE ============================ -->
+<div class="page">
+  <section>
+    <h2>5. Generating the document</h2>
+    <figure>
+      <img src="build/shots/generate.png" alt="The generate tab">
+      <figcaption>A summary of what you are about to print, with any expiry warnings.</figcaption>
+    </figure>
+    <p><strong>Download PDF</strong> saves the document; <strong>Preview in new tab</strong> opens
+      it without saving. If anything required is missing, you are told what before anything is
+      produced.</p>
+
+    <figure>
+      <img src="build/shots/generate-reminder.png" alt="The reminder to save the json">
+      <figcaption>After downloading, a reminder to save the .json too.</figcaption>
+    </figure>
+    <div class="callout">
+      <p><strong>The PDF cannot be loaded back in.</strong> It is the printable record. The
+        <code>.json</code> is the editable one &mdash; without it, next month's version of this bag
+        has to be typed from scratch. Save both.</p>
+    </div>
+  </section>
+</div>
+
+<!-- ============================ 6. BAG PDF ============================ -->
+<div class="page">
+  <section>
+    <h2>6. What the drug bag PDF contains</h2>
+    <div class="two">
+      <figure>
+        <img src="build/shots/pdf-bag-label.png" alt="The bag label page">
+        <figcaption>Page 1 &mdash; the label.</figcaption>
+      </figure>
+      <figure>
+        <img src="build/shots/pdf-bag-log.png" alt="A usage log page">
+        <figcaption>A usage log, one per medication.</figcaption>
+      </figure>
+    </div>
+    <p><strong>The label</strong> carries your logo, company name and CQC registration, the bag
+      number, who prepped and checked it, the prepped date, the seal number, and the
+      <strong>bag expiry</strong> &mdash; the earliest expiry it contains, because that is when the
+      bag as a whole stops being usable. The contents table colour-codes each legal category and
+      shows anything expired or expiring in red.</p>
+    <p>Below it, a <strong>two-person check</strong> block to sign, and the <strong>if found</strong>
+      notice asking a finder to call you or hand the bag to a police station.</p>
+    <p>If anything expires before the in-service date, a red band lists exactly what and when.</p>
+    <p><strong>Each usage log</strong> repeats the medication, presentation, dose, batch and expiry
+      at the top, then gives one numbered row per dose with date used, PRF number and a signature.
+      A medication with more doses than fit on a page is split evenly across pages rather than
+      leaving a stub.</p>
+    <p>Every page footer carries the bag, the company, when the PDF was generated, and
+      &ldquo;Page 3 of 9&rdquo; &mdash; so a missing sheet is obvious and you can tell two printouts
+      apart.</p>
+  </section>
+</div>
+
+<!-- ============================ 7. CD REGISTER ============================ -->
+<div class="page">
+  <section>
+    <h2>7. What the CD register contains</h2>
+    <figure>
+      <img src="build/shots/cd-setup.png" alt="CD setup">
+      <figcaption>The CD side of the tool, in its own colour.</figcaption>
+    </figure>
+    <div class="two">
+      <figure>
+        <img src="build/shots/pdf-cd-front.png" alt="Register front sheet">
+        <figcaption>The front sheet.</figcaption>
+      </figure>
+      <figure>
+        <img src="build/shots/pdf-cd-register.png" alt="A register page">
+        <figcaption>A register page, one per batch.</figcaption>
+      </figure>
+    </div>
+    <p><strong>The front sheet</strong> lists the safe reference and location, the accountable
+      officer, the stock held with quantities and units, a two-person stock check block, and a
+      storage and handling notice.</p>
+    <p><strong>Each register page</strong> opens with the balance brought forward, then takes date,
+      time, PRF number, amount given, amount discarded, running balance, and separate administering
+      and witness signatures. Spare rows beyond the stock count give discards and part doses a line
+      of their own.</p>
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <figure class="compact">
+      <img src="build/shots/pdf-cd-stockcheck.png" alt="Stock check record">
+      <figcaption>The stock check record &mdash; a column per drug, headed with its unit and
+        batch, and the issued quantity on the first row to check against.</figcaption>
+    </figure>
+    <figure class="compact">
+      <img src="build/shots/pdf-cd-signout.png" alt="Sign-out sheet">
+      <figcaption>The sign-out sheet &mdash; safe to personal pouch, and back again.</figcaption>
+    </figure>
+    <p>Both are landscape. The stock check record continues onto further sheets past seven drugs
+      rather than squeezing the columns.</p>
+    <div class="callout stop">
+      <p><strong>The register is a convenience format.</strong> It does not constitute, replace or
+        discharge any statutory record-keeping duty. Satisfy yourself that it meets the
+        requirements that apply to you before relying on it, and retain records in line with your
+        own controlled drugs policy and current legislation.</p>
+    </div>
+  </section>
+</div>
+
+<!-- ============================ 8. DRUG MATRIX ============================ -->
+<div class="page">
+  <section>
+    <h2>8. The drug matrix</h2>
+    <p>A drug matrix &mdash; a formulary &mdash; sets out which clinical grades may give which
+      medication. It records no batches, expiry dates or quantities, because it describes what is
+      allowed rather than what is held.</p>
+
+    <h3>Your clinical grades</h3>
+    <figure class="tall">
+      <img src="build/shots/matrix-grades.png" alt="The clinical grades card">
+      <figcaption>The clinical grades card, on the setup tab.</figcaption>
+    </figure>
+    <p>The list starts with a common set &mdash; first responder, FREC 3, emergency care assistant,
+      FREC 4, AAP, EMT, FREUC 5, paramedic, APP, nurse, doctor &mdash; but organisations differ, so
+      it is only a starting point. <strong>Rename</strong> any grade, <strong>reorder</strong> them
+      with the arrows, <strong>remove</strong> the ones you do not use, and <strong>Add grade</strong>
+      for the ones you do. <strong>Restore the default list</strong> puts the original set back.</p>
+    <p>Each grade has a full name and a short label. The short label is what fits in the column
+      heading; the full name is printed in the key underneath the table, so an abbreviation never
+      has to be guessed at.</p>
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <div class="callout info">
+      <p><strong>Order matters.</strong> The grades appear left to right in the order you list them,
+        so putting them in order of scope of practice is what makes the &ldquo;this grade and
+        above&rdquo; fill below do something sensible. Removing a grade also clears everything
+        ticked against it, and you are asked to confirm first.</p>
+    </div>
+
+    <h3>Adding the medications</h3>
+    <figure>
+      <img src="build/shots/matrix-form.png" alt="The matrix medication form">
+      <figcaption>The medication form on the matrix side: an indication instead of batch, expiry
+        and quantity.</figcaption>
+    </figure>
+    <p>Quick add works exactly as it does elsewhere, filling in the name, formulation, strength and
+      suggested legal category. In place of the batch, expiry and quantity you get an
+      <strong>Indication</strong> box &mdash; what the medication is given for. Put each indication
+      on its own line and it prints as a bulleted list in the table.</p>
+
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <h3>Ticking who can give what</h3>
+    <figure>
+      <img src="build/shots/matrix-grid.png" alt="The matrix grid">
+      <figcaption>The grid. Green is allowed, red is not.</figcaption>
+    </figure>
+    <p>Click any cell to change it. Rather than clicking every cell one at a time, use the fill
+      modes above the grid:</p>
+    <ul>
+      <li><strong>Toggle one</strong> &mdash; a click flips that single cell.</li>
+      <li><strong>This grade and above</strong> &mdash; a click allows that grade and everything to
+        its right, and clears everything to its left. This is the quick way to say &ldquo;paramedic
+        and up&rdquo;.</li>
+      <li><strong>This grade and below</strong> &mdash; the same in the other direction.</li>
+    </ul>
+    <p>Clicking a <strong>medication name</strong> fills or clears its whole row, and clicking a
+      <strong>grade heading</strong> fills or clears that whole column. A drug everyone carries is
+      therefore one click, not eleven.</p>
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <h3>What the matrix PDF contains</h3>
+    <figure class="compact">
+      <img src="build/shots/pdf-matrix.png" alt="The generated drug matrix">
+      <figcaption>The generated matrix, A4 landscape.</figcaption>
+    </figure>
+    <p>Medication name, indication, formulation and strength run down the left, then one column per
+      grade, green for allowed and red for not. Underneath sit the <strong>key to the
+      columns</strong> and a <strong>formulary approval</strong> block for the approver and checker
+      to sign and date.</p>
+    <p>The banner carries your formulary reference, the approval date and the review date, so an
+      out-of-date copy on a wall is obvious. If you have more grades than fit across one sheet, the
+      table continues onto further sheets with the medication columns repeated and the banner
+      saying which grades are on which sheet &mdash; for example &ldquo;Grades 1&ndash;15 of
+      24&rdquo;.</p>
+    <div class="callout stop">
+      <p><strong>A matrix is a local governance document.</strong> What any individual may
+        administer depends on their registration, their scope of practice, their employer's
+        policy, any patient group direction or written instruction in force, and current
+        legislation. This tool prints what you tick. Have the matrix approved by whoever is
+        clinically accountable in your organisation before it is used.</p>
+    </div>
+  </section>
+</div>
+
+<!-- ============================ 8. CATEGORIES ============================ -->
+<div class="page">
+  <section>
+    <h2>9. Legal categories</h2>
+    <table>
+      <tr><th style="width:22mm">Category</th><th>Meaning</th></tr>
+      <tr><td><span class="tag GSL">GSL</span></td><td>General sales list</td></tr>
+      <tr><td><span class="tag P">P</span></td><td>Pharmacy only</td></tr>
+      <tr><td><span class="tag POM">POM</span></td><td>Prescription only medicine</td></tr>
+      <tr><td><span class="tag S17">S17</span></td>
+          <td>Paramedic exemption &mdash; Human Medicines Regulations 2012, Schedule 17</td></tr>
+      <tr><td><span class="tag S19">S19</span></td>
+          <td>Parenteral administration in an emergency &mdash; Schedule 19</td></tr>
+      <tr><td><span class="tag CD">CD</span></td>
+          <td>Controlled drug &mdash; recorded on the CD register, never in a drug bag</td></tr>
+    </table>
+
+    <div class="callout stop">
+      <p><strong>These are suggestions to save typing, not legal determinations.</strong></p>
+      <p>Medicines can sit in more than one category depending on indication, route and pack size.
+        Legislation is amended over time and the built-in list is a fixed snapshot that does not
+        update itself. The categories were <strong>not verified against primary legislation</strong>
+        when the list was compiled.</p>
+      <p>Check every category against current legislation and your own organisation's medicines
+        policy, patient group directions and standard operating procedures before a document is
+        used. Change any of them in the form &mdash; nothing is locked.</p>
+    </div>
+  </section>
+</div>
+
+<!-- ============================ 9. SAVING ============================ -->
+<div class="page">
+  <section>
+    <h2>10. Saving, reusing and backing up</h2>
+    <h3>The two file types</h3>
+    <table>
+      <tr><th style="width:38mm">File</th><th>What it is for</th></tr>
+      <tr><td><code>Drug-Bag-1-saved.json</code><br><code>CD-Register-2-saved.json</code></td>
+          <td>A whole bag or register &mdash; details and every medication. Import it to rebuild
+              or update that document.</td></tr>
+      <tr><td><code>Company-Your-Ltd.json</code></td>
+          <td>Just your organisation: name, contact, address, CQC registration and logo. Load it
+              into anything new.</td></tr>
+    </table>
+    <p>Importing a whole bag also works as a source of company details, so you can lift them out of
+      any old export.</p>
+
+    <h3>Preparing next month's bag</h3>
+    <ol class="steps">
+      <li>Setup &rarr; <strong>Start from a saved file</strong> &rarr; import last month's bag.</li>
+      <li>Update the batch numbers and expiry dates on the medications tab.</li>
+      <li>Generate, then export the <code>.json</code> again under the new bag number.</li>
+    </ol>
+
+    <div class="callout">
+      <p><strong>Browser storage is not a backup.</strong> Clearing site data, a private window, or
+        moving to another computer will lose it, and no responsibility is accepted for work lost
+        that way. Export the <code>.json</code> and keep it somewhere durable &mdash; the app tells
+        you when a document has never been exported, or has changed since it was.</p>
+    </div>
+  </section>
+</div>
+
+<!-- ============================ 10 & 11 ============================ -->
+<div class="page">
+  <section>
+    <h2>11. Dark mode and phones</h2>
+    <div class="two">
+      <figure>
+        <img src="build/shots/dark.png" alt="Dark mode">
+        <figcaption>Dark mode.</figcaption>
+      </figure>
+      <figure>
+        <img src="build/shots/phone.png" alt="Phone layout">
+        <figcaption>On a phone.</figcaption>
+      </figure>
+    </div>
+    <p>The interface follows your device's light or dark setting. The <strong>Theme</strong> button
+      in the top bar cycles auto, light and dark if you want to override it; your choice is
+      remembered. The generated PDF is always light, because it is meant to be printed.</p>
+    <p>The layout collapses to a single column on a phone, so a bag can be prepped from a handset.</p>
+  </section>
+
+  <section>
+    <h2>12. Troubleshooting</h2>
+    <h4>&ldquo;Complete the setup tab first&rdquo;</h4>
+    <p>Something required is empty. The message names each missing field. If you ticked CQC
+      registered, the registration number is required too.</p>
+
+    <h4>The expiry will not accept what I type</h4>
+    <p>Expiry is picked, not typed. Use the month picker, or switch the dropdown beside it to
+      <strong>Exact date</strong>. On Safari, which has no month picker, the field accepts typing
+      instead &mdash; <code>07/25</code>, <code>10/2027</code> and <code>18/10/2025</code> all work.</p>
+
+    <h4>My medication is not in the quick add list</h4>
+    <p>Use <strong>Not on the list &mdash; enter it manually</strong> and type it. If it is a
+      controlled drug, switch the document type to the CD register on the setup tab.</p>
+
+    <h4>Preview does not open</h4>
+    <p>Your browser blocked the pop-up, which is common on mobile. Use <strong>Download PDF</strong>
+      instead.</p>
+
+    <h4>My work has disappeared</h4>
+    <p>Browser storage was cleared, or you are on a different device, browser, or a private window.
+      Import your <code>.json</code> export. If you have none, it cannot be recovered.</p>
+
+    <h4>The browser says it will not store my work</h4>
+    <p>Storage is full or blocked. Export the <code>.json</code> immediately &mdash; what is on
+      screen is still correct, but it will not survive closing the tab.</p>
+  </section>
+</div>
+
+<!-- ============================ 12. LEGAL ============================ -->
+<div class="page">
+  <section>
+    <h2>13. Disclaimer, licence and sources</h2>
+
+    <h3>Disclaimer</h3>
+    <p>Drug Bag Tracker is a document generator, not a clinical, pharmaceutical or legal reference.
+      It is provided <strong>as is, without warranty of any kind</strong>.</p>
+    <p>Before any document is used, check that every entry matches the stock actually held:
+      medication name, formulation, strength, batch number, expiry date, quantity and legal
+      category. The categories the tool offers and pre-fills are suggestions, not legal
+      determinations, and were not verified against primary legislation.</p>
+    <p>The controlled drugs register is a convenience format and discharges no statutory
+      record-keeping duty. Everything is stored in your browser and nothing is uploaded; browser
+      storage is not a backup, and no responsibility is accepted for work lost to it being cleared.</p>
+
+    <h3>Licence</h3>
+    <p>MIT licence, copyright &copy; 2026 Finlay Russell. The software is provided &ldquo;as
+      is&rdquo;, without warranty of any kind, express or implied, including but not limited to the
+      warranties of merchantability, fitness for a particular purpose and non-infringement. In no
+      event shall the author be liable for any claim, damages or other liability arising from, out
+      of or in connection with the software or its use.</p>
+    <p>PDF generation uses jsPDF, bundled under the MIT licence.</p>
+
+    <h3>Sources</h3>
+    <p>The built-in medication list is a user-supplied list of common pre-hospital medicines. The
+      legal category suggestions were informed by the Journal of Paramedic Practice article
+      <em>Paramedics and medicines: legal considerations</em>, NHS Specialist Pharmacy Service
+      guidance on legal mechanisms to supply and administer medicines, HCPC guidance on sale,
+      supply and administration, and Schedules 17 and 19 of the Human Medicines Regulations 2012.</p>
+    <p>None of these is a substitute for the legislation itself, and the primary text was not
+      reachable when the list was compiled, so the categories are unverified against it.</p>
+
+    <h3>Contact</h3>
+    <p>Finlay Russell &mdash; finlay3110@gmail.com</p>
+  </section>
+</div>
+
+</body>
+</html>

@@ -239,6 +239,175 @@ function junkPath() {
   return p;
 }
 
+/* ---------------- the drug matrix --------------------------------------- */
+async function testMatrix(page) {
+  console.log("\nthe drug matrix");
+  const errors = [];
+  // testApp ran on this page and left its own handlers; two accepting the same
+  // dialog is an error, so take the page over cleanly.
+  page.removeAllListeners("dialog");
+  page.removeAllListeners("pageerror");
+  page.on("dialog", d => d.accept());
+  page.on("pageerror", e => errors.push(e.message));
+
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.check('input[name=docMode][value=matrix]');
+
+  // Grades start from a default list, and are all editable.
+  check("a formulary offers clinical grades", await page.isVisible("#gradesCard"));
+  eq("with a starting list", await page.locator("#gradeList .grade").count(), 11);
+  eq("in the order given", await page.locator(".grade-name input").first().inputValue(),
+    "First responder");
+  eq("and the last is the most senior",
+    await page.locator(".grade-name input").last().inputValue(), "Doctor");
+
+  // The formulary records what may be given, not what is held.
+  await page.fill("#companyName", "Test Medical Ltd");
+  await page.fill("#companyPhone", "01234 567890");
+  await page.fill("#bagNumber", "2026-v1");
+  await page.fill("#preppedBy", "Dr A. Shah");
+  await page.click('[data-tab="meds"]');
+  check("an indication is asked for", await page.isVisible("#f-mIndication"));
+  check("expiry is not", await page.locator("#f-mExpiry").isHidden());
+  check("nor batch", await page.locator("#f-mBatch").isHidden());
+  check("nor quantity", await page.locator("#f-mDoses").isHidden());
+
+  await page.fill("#mName", "Adenosine");
+  await page.fill("#mPresentation", "Ampoule");
+  await page.fill("#mDose", "3mg/1ml");
+  await page.click("#medSubmit");
+  check("an entry without an indication is refused", await page.isVisible("#medError"));
+  await page.fill("#mIndication", "Conversion of paroxysmal SVT");
+  await page.click("#medSubmit");
+  eq("and accepted with one", await page.textContent("#medCount"), "1");
+
+  await page.fill("#mName", "Oxygen");
+  await page.fill("#mIndication", "Hypoxaemia\nCardiac arrest");
+  await page.fill("#mPresentation", "Gas");
+  await page.fill("#mDose", "N/A");
+  await page.click("#medSubmit");
+
+  const cells = () => page.locator(".m-cell");
+  eq("the matrix is two rows of eleven", await cells().count(), 22);
+  eq("and starts with nothing allowed",
+    await page.locator(".m-cell.yes").count(), 0);
+
+  // A single cell.
+  await page.locator("#matrixTable tr:nth-child(2) .m-cell").nth(3).click();
+  eq("a click allows one cell", await page.locator(".m-cell.yes").count(), 1);
+  await page.locator("#matrixTable tr:nth-child(2) .m-cell").nth(3).click();
+  eq("and clicking again clears it", await page.locator(".m-cell.yes").count(), 0);
+
+  // A whole row, from its name.
+  await page.locator("#matrixTable tr:nth-child(3) .m-row").click();
+  eq("the name fills the row", await page.locator(".m-cell.yes").count(), 11);
+  await page.locator("#matrixTable tr:nth-child(3) .m-row").click();
+  eq("and clears it again", await page.locator(".m-cell.yes").count(), 0);
+
+  // A whole column, from its heading.
+  await page.locator(".m-head").last().click();
+  eq("a heading fills the column", await page.locator(".m-cell.yes").count(), 2);
+  await page.locator(".m-head").last().click();
+
+  // The one that saves the tedium: this grade and everything above it.
+  await page.check('input[name=fillMode][value=up]');
+  await page.locator("#matrixTable tr:nth-child(2) .m-cell").nth(7).click();
+  eq("grade-and-above fills to the end", await page.locator(".m-cell.yes").count(), 4);
+  await page.check('input[name=fillMode][value=down]');
+  await page.locator("#matrixTable tr:nth-child(3) .m-cell").nth(2).click();
+  eq("grade-and-below fills from the start",
+    await page.locator(".m-cell.yes").count(), 4 + 3);
+  await page.check('input[name=fillMode][value=toggle]');
+
+  // Reordering and removing grades keeps the matrix honest.
+  await page.click('[data-tab="setup"]');
+  await page.locator(".grade").nth(1).locator(".icon-btn").first().click();
+  eq("grades can be reordered",
+    await page.locator(".grade-name input").first().inputValue(), "FREC 3");
+
+  await page.fill("#gradeList .grade:last-child .grade-name input", "Consultant");
+  await page.click('[data-tab="meds"]');
+  eq("and renamed, which the matrix picks up",
+    await page.locator(".m-head").last().textContent(), "Doctor");
+
+  await page.click('[data-tab="setup"]');
+  const before = await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem("drug-bag-tracker/v2")).docs.matrix;
+    return d.medications.reduce((n, m) => n + Object.keys(m.allow || {}).length, 0);
+  });
+  await page.locator(".grade").last().locator(".icon-btn.del").click();
+  eq("removing a grade drops its column",
+    await page.locator("#gradeList .grade").count(), 10);
+  const after = await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem("drug-bag-tracker/v2")).docs.matrix;
+    return d.medications.reduce((n, m) => n + Object.keys(m.allow || {}).length, 0);
+  });
+  check("and leaves no permission behind for it", after < before, before + " -> " + after);
+
+  await page.click("#gradeAdd");
+  eq("a grade can be added", await page.locator("#gradeList .grade").count(), 11);
+  await page.fill("#gradeList .grade:last-child .grade-name input", "Critical care paramedic");
+  await page.fill("#gradeList .grade:last-child .grade-abbr input", "CCP");
+  await page.click('[data-tab="meds"]');
+  eq("and appears as a column", await page.locator(".m-head").last().textContent(), "CCP");
+
+  // An unnamed grade cannot be a column, and blocks nothing else.
+  await page.click('[data-tab="setup"]');
+  await page.click("#gradeAdd");
+  await page.click('[data-tab="meds"]');
+  eq("an unnamed grade is not a column", await page.locator(".m-head").count(), 11);
+
+  // Export, naming and the round trip.
+  await page.click('[data-tab="generate"]');
+  const [file] = await Promise.all([
+    page.waitForEvent("download"), page.click("#exportBtn")]);
+  eq("the export is named for the formulary",
+    file.suggestedFilename(), "Formulary-2026-v1-saved.json");
+  const saved = path.join(os.tmpdir(), "smoke-formulary.json");
+  await file.saveAs(saved);
+  const parsed = JSON.parse(fs.readFileSync(saved, "utf8"));
+  eq("and carries the grades", parsed.grades.length, 12);
+  check("and the permissions",
+    parsed.medications.some(m => Object.keys(m.allow || {}).length > 0));
+
+  const [pdf] = await Promise.all([
+    page.waitForEvent("download"), page.click("#generateBtn")]);
+  eq("the PDF is named for the formulary", pdf.suggestedFilename(), "Formulary-2026-v1.pdf");
+
+  // The matrix is landscape, and says who each column is.
+  const built = await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem("drug-bag-tracker/v2")).docs.matrix;
+    const doc = window.DrugBagPDF.build(Object.assign({}, d.setup, {
+      medications: d.medications, mode: "matrix",
+      grades: d.grades.filter(g => g.name.trim())
+    }));
+    const page1 = doc.internal.pages[1].join("\n");
+    return {
+      pages: doc.internal.getNumberOfPages(),
+      landscape: doc.internal.pageSize.getWidth() > doc.internal.pageSize.getHeight(),
+      key: page1.indexOf("KEY TO COLUMNS") >= 0,
+      approval: page1.indexOf("FORMULARY APPROVAL") >= 0,
+      expands: page1.indexOf("CCP = Critical care paramedic") >= 0
+    };
+  });
+  eq("it is one sheet here", built.pages, 1);
+  check("landscape", built.landscape);
+  check("with a key to the column headings", built.key);
+  check("which spells the abbreviations out", built.expands);
+  check("and an approval block", built.approval);
+
+  // Switching away and back leaves the formulary alone.
+  await page.click('[data-tab="setup"]');
+  await page.check('input[name=docMode][value=bag]');
+  check("bag mode hides the grades", await page.locator("#gradesCard").isHidden());
+  await page.check('input[name=docMode][value=matrix]');
+  eq("and the formulary is still there", await page.inputValue("#bagNumber"), "2026-v1");
+  eq("with its medications", await page.textContent("#medCount"), "2");
+
+  check("no page errors", errors.length === 0, errors.join("; "));
+}
+
 /* ---------------- app behaviour ----------------------------------------- */
 async function testApp(page) {
   console.log("\napp behaviour");
@@ -701,6 +870,7 @@ function serve() {
   try {
     await testPdfs(page);
     await testApp(page);
+    await testMatrix(page);
   } finally {
     await browser.close();
     server.close();

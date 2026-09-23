@@ -22,7 +22,7 @@
     <span class="cross" aria-hidden="true">+</span>
     <div>
       <h1>Drug Bag Tracker</h1>
-      <p>Drug bag and controlled drugs records</p>
+      <p>Drug bag, controlled drugs and formulary records</p>
     </div>
   </div>
   <div class="topbar-actions">
@@ -60,6 +60,14 @@
             <b>Controlled drugs (CD safe)</b>
             <small>Stock held in the safe. Produces a register with running balances, plus a
               sign-out sheet for drugs taken into a personal pouch.</small>
+          </span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="docMode" value="matrix">
+          <span>
+            <b>Drug matrix (formulary)</b>
+            <small>Which clinical grades may give which medication. Produces a colour-coded
+              landscape table, one column per grade.</small>
           </span>
         </label>
       </div>
@@ -162,6 +170,19 @@
       </div>
     </div>
 
+    <div class="card" id="gradesCard" hidden>
+      <h2>Clinical grades</h2>
+      <p class="hint">One column per grade, in this order, left to right. Organisations differ,
+        so rename, reorder, remove or add whatever you actually use. The short label is what
+        fits in the column heading; the full name is printed in the key beneath the table.</p>
+      <div id="gradeList" class="grade-list"></div>
+      <p class="error" id="gradeError" hidden></p>
+      <div class="actions">
+        <button type="button" class="btn primary small" id="gradeAdd">Add grade</button>
+        <button type="button" class="btn ghost small" id="gradeDefaults">Restore the default list</button>
+      </div>
+    </div>
+
     <div class="actions">
       <button type="button" class="btn primary" data-goto="meds">Next: Medications &rarr;</button>
     </div>
@@ -171,7 +192,7 @@
   <section class="panel" id="panel-meds" role="tabpanel">
     <div class="card">
       <h2>Quick add</h2>
-      <p class="hint">Search the list to fill the form, then add the batch, expiry and quantity.
+      <p class="hint" id="quickHint">Search the list to fill the form, then add the batch, expiry and quantity.
         The suggested legal category is a starting point to save typing &mdash; check it against
         your own policy and current legislation before the document is used.</p>
       <div class="quick">
@@ -190,6 +211,13 @@
             <span>Medication <b>*</b></span>
             <input type="text" id="mName" placeholder="e.g. Paracetamol infant suspension">
           </label>
+          <label class="field span2" id="f-mIndication" hidden>
+            <span>Indication <b>*</b></span>
+            <textarea id="mIndication" rows="3"
+              placeholder="What it is given for. One per line for a list."></textarea>
+            <small class="echo">Printed in the second column. Put each indication on its own
+              line and they are listed as bullets.</small>
+          </label>
           <label class="field">
             <span>Presentation <b>*</b></span>
             <input type="text" id="mPresentation" list="presentationList" placeholder="e.g. Sachet">
@@ -204,7 +232,7 @@
             <span>Dose / strength <b>*</b></span>
             <input type="text" id="mDose" placeholder="e.g. 120mg/5ml">
           </label>
-          <label class="field">
+          <label class="field" id="f-mBatch">
             <span>Batch number</span>
             <input type="text" id="mBatch" placeholder="e.g. X2257R">
           </label>
@@ -261,6 +289,20 @@
       <h2><span id="contentsTitle">Bag contents</span> <span class="pill" id="medCount2">0</span></h2>
       <div id="medList" class="med-list"></div>
       <p class="empty" id="medEmpty">No medications added yet. Add the first one above.</p>
+    </div>
+
+    <div class="card" id="matrixCard" hidden>
+      <h2>Who can give what</h2>
+      <p class="hint">Click a cell to change it. Click a medication name to fill its whole row,
+        or a grade heading to fill that whole column.</p>
+      <div class="fill-modes" role="radiogroup" aria-label="What a click does">
+        <label><input type="radio" name="fillMode" value="toggle" checked> Toggle one</label>
+        <label><input type="radio" name="fillMode" value="up"> This grade and above</label>
+        <label><input type="radio" name="fillMode" value="down"> This grade and below</label>
+      </div>
+      <p class="hint" id="fillModeHint">A click flips a single cell between allowed and not.</p>
+      <div class="matrix-scroll"><table class="matrix" id="matrixTable"></table></div>
+      <p class="empty" id="matrixEmpty">Add medications and clinical grades to build the matrix.</p>
     </div>
 
     <div class="actions">

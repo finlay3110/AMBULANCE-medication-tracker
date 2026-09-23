@@ -12,7 +12,8 @@ A browser-based tool for ambulance and event-medical companies to produce
 medication records as A4 PDFs. It makes two separate documents:
 
 - a **drug bag** label and usage log, and
-- a **controlled drugs register** for stock held in the CD safe.
+- a **controlled drugs register** for stock held in the CD safe, and
+- a **drug matrix**: which clinical grades may give which medication.
 
 Controlled drugs are never carried in the drug bag, so the two are kept
 completely apart: each has its own details, its own list and its own export.
@@ -71,6 +72,30 @@ used.
 Controlled drugs in the catalogue are offered only on a CD register. Searching
 for one on a drug bag says so and points at the other document rather than
 letting it be added.
+
+### The drug matrix
+
+A formulary: one row per medication, one column per clinical grade, every cell
+either allowed or not. It produces a colour-coded landscape table with a green
+tick or a red cross in each cell.
+
+**Grades are yours.** A default list is offered — first responder, FREC 3,
+emergency care assistant, FREC 4, AAP, EMT, FREUC 5, paramedic, APP, nurse,
+doctor — but organisations differ, so every grade can be renamed, reordered,
+removed, or added to, and the whole list can be replaced. Each carries a full
+name and a short label: the short label is the column heading, and the full name
+is printed in a key beneath the table so an abbreviation is never ambiguous.
+
+**Filling it in.** Click a cell to toggle it, a medication name to fill its row,
+or a column heading to fill that column. Because formularies are usually written
+as "paramedic and above", the click mode can be switched to **this grade and
+above** (or below), so one click sets the whole run and clears the rest.
+
+Medications here record what may be given rather than what is held, so they take
+an indication — one per line becomes a bulleted list — instead of a batch,
+expiry and quantity. More grades than fit across one sheet continue on further
+sheets, with the medication columns repeated and the heading saying which grades
+they cover.
 
 ### Company profile
 
@@ -229,8 +254,26 @@ Screen only — the generated PDF is a printed document and stays light.
 | `pdf.js` | A4 PDF generation (label page + usage logs) |
 | `DISCLAIMER.md` | Disclaimer, legal-category caveats and sources |
 | `LICENSE` | MIT licence |
+| `docs/build-guide.js` | Builds the user guide PDF from the live app |
+| `docs/user-guide.html` | The guide's text and layout |
 | `test/smoke.js` | Smoke test: expiry parser, app flow, PDF page counts and margins |
 | `vendor/jspdf.umd.min.js` | Bundled jsPDF build (MIT, see `vendor/jspdf-LICENSE.txt`) |
+
+## User guide
+
+A 20-page illustrated guide is generated from the app itself, so its screenshots
+are never out of date:
+
+```
+npm install
+npm run guide          # writes Drug-Bag-Tracker-User-Guide.pdf
+```
+
+`docs/build-guide.js` drives the real app in a browser, captures every figure,
+generates sample documents, and renders `docs/user-guide.html` to A4. The sample
+PDF pages need python3 with `pypdfium2`; without it the guide still builds, minus
+those figures. Everything it writes is git-ignored — rebuild it rather than
+committing a stale copy.
 
 ## Tests
 

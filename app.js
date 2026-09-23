@@ -14,13 +14,56 @@
     mode: "bag",
     docs: {
       bag: { setup: {}, medications: [], meta: {} },
-      cd: { setup: {}, medications: [], meta: {} }
+      cd: { setup: {}, medications: [], meta: {} },
+      matrix: { setup: {}, medications: [], grades: null, meta: {} }
     },
     editing: null
   };
 
+  var MODES = ["bag", "cd", "matrix"];
+
   function doc() { return state.docs[state.mode]; }
   function isCdMode() { return state.mode === "cd"; }
+  /* The formulary: a grid of which clinical grade may give which medication. */
+  function isMatrixMode() { return state.mode === "matrix"; }
+  /* Both stock documents track batches and expiry; the formulary does not. */
+  function isStockMode() { return !isMatrixMode(); }
+
+  /*
+   * A starting point only. Every organisation's grades differ, so these are
+   * editable, reorderable and removable, and the list can be replaced wholesale.
+   */
+  var DEFAULT_GRADES = [
+    ["First responder", "FR"],
+    ["FREC 3", "FREC 3"],
+    ["Emergency care assistant", "ECA"],
+    ["FREC 4", "FREC 4"],
+    ["AAP", "AAP"],
+    ["EMT", "EMT"],
+    ["FREUC 5", "FREUC 5"],
+    ["Paramedic", "Para"],
+    ["APP (advanced paramedic)", "APP"],
+    ["Nurse", "Nurse"],
+    ["Doctor", "Doctor"]
+  ];
+
+  var gradeSeq = 0;
+  function newGradeId() {
+    gradeSeq += 1;
+    return "g" + Date.now().toString(36) + gradeSeq.toString(36);
+  }
+
+  function defaultGrades() {
+    return DEFAULT_GRADES.map(function (g) {
+      return { id: newGradeId(), name: g[0], abbr: g[1] };
+    });
+  }
+
+  function grades() {
+    var d = state.docs.matrix;
+    if (!Array.isArray(d.grades)) d.grades = defaultGrades();
+    return d.grades;
+  }
 
   var SETUP_FIELDS = [
     "companyName", "companyPhone", "companyAddress",
@@ -57,6 +100,9 @@
       inService: ["In service until", ""],
       inServiceHint: "Optional. Expiry is then checked up to this date, so anything running " +
         "out while the bag is away is flagged.",
+      quickHint: "Search the list to fill the form, then add the batch, expiry and quantity. " +
+        "The suggested legal category is a starting point to save typing \u2014 check it " +
+        "against your own policy and current legislation before the document is used.",
       summaryId: "Drug bag",
       addTitle: "Add medication",
       editTitle: "Edit medication"
@@ -80,9 +126,37 @@
       inService: ["Check expiry up to", ""],
       inServiceHint: "Optional. Stock expiring before this date is flagged, so a review or " +
         "restock can be planned.",
+      quickHint: "Search the list to fill the form, then add the batch, expiry and quantity. " +
+        "The suggested legal category is a starting point to save typing \u2014 check it " +
+        "against your own policy and current legislation before the document is used.",
       summaryId: "CD safe",
       addTitle: "Add controlled drug",
       editTitle: "Edit controlled drug"
+    },
+    matrix: {
+      detailsTitle: "Formulary details",
+      contentsTitle: "Medications in the formulary",
+      tabMeds: "2. Medications",
+      medEmpty: "No medications added yet. Add the first one above.",
+      saveTitle: "Save / load formulary",
+      saveHint: "Everything stays on this device — nothing is uploaded. Exports are named " +
+        "after the formulary reference, e.g. Formulary-2026-v1-saved.json.",
+      generateHint: "A4 landscape PDF: the matrix as a colour-coded table, one column per " +
+        "clinical grade, with a key to the column headings and an approval block.",
+      checkedByHint: "The matrix carries an approved-by / checked-by signature block.",
+      identity: ["Formulary reference", "e.g. 2026-v1"],
+      preppedBy: ["Approved by", "Name of the person who approved this formulary"],
+      preppedDate: ["Approved date", ""],
+      checkedBy: ["Checked by", "Second person who checked it (optional)"],
+      doses: ["Number of doses", "e.g. 12"],
+      inService: ["Review date", ""],
+      inServiceHint: "Optional. Printed on the matrix so it is obvious when it is due a review.",
+      quickHint: "Search the list to fill the form, then add what the medication is given " +
+        "for. The suggested legal category is a starting point to save typing \u2014 check " +
+        "it against your own policy and current legislation before the document is used.",
+      summaryId: "Formulary",
+      addTitle: "Add medication",
+      editTitle: "Edit medication"
     }
   };
 
@@ -104,6 +178,7 @@
       r.checked = r.value === state.mode;
     });
     document.body.classList.toggle("cd-mode", isCdMode());
+    document.body.classList.toggle("matrix-mode", isMatrixMode());
 
     relabel("bagNumber", w.identity);
     relabel("preppedBy", w.preppedBy);
@@ -120,17 +195,30 @@
     $("saveTitle").textContent = w.saveTitle;
     $("saveHint").textContent = w.saveHint;
     $("generateHint").textContent = w.generateHint;
+    $("quickHint").textContent = w.quickHint;
     $("checkedByHint").textContent = w.checkedByHint;
 
     // Schedule and seal number are bag-only; safe location is CD-only.
     $("f-mSchedule").hidden = isCdMode();
     $("f-mUnit").hidden = !isCdMode();
-    $("f-sealNumber").hidden = isCdMode();
+    $("f-sealNumber").hidden = !isBagMode();
     $("f-safeLocation").hidden = !isCdMode();
+
+    // A formulary records what may be given, not what is held: no batch,
+    // expiry or quantity, but an indication and the grade matrix instead.
+    $("f-mIndication").hidden = !isMatrixMode();
+    $("f-mBatch").hidden = isMatrixMode();
+    $("f-mExpiry").hidden = isMatrixMode();
+    $("f-mDoses").hidden = isMatrixMode();
+    $("gradesCard").hidden = !isMatrixMode();
+    $("matrixCard").hidden = !isMatrixMode();
+    if (isMatrixMode()) renderGrades();
   }
 
+  function isBagMode() { return state.mode === "bag"; }
+
   function setMode(mode) {
-    if (mode === state.mode) return;
+    if (mode === state.mode || MODES.indexOf(mode) < 0) return;
     readSetup();
     state.mode = mode;
     hidePdfReminder();
@@ -193,9 +281,12 @@
     if (raw) {
       try {
         var parsed = JSON.parse(raw);
-        state.mode = parsed.mode === "cd" ? "cd" : "bag";
+        state.mode = MODES.indexOf(parsed.mode) >= 0 ? parsed.mode : "bag";
         state.docs.bag = readDoc(parsed.docs && parsed.docs.bag);
         state.docs.cd = readDoc(parsed.docs && parsed.docs.cd);
+        state.docs.matrix = readDoc(parsed.docs && parsed.docs.matrix);
+        var storedGrades = parsed.docs && parsed.docs.matrix && parsed.docs.matrix.grades;
+        state.docs.matrix.grades = Array.isArray(storedGrades) ? storedGrades : null;
       } catch (e) { /* ignore corrupt data */ }
       return;
     }
@@ -246,6 +337,237 @@
       $("preppedDate").value = new Date().toISOString().slice(0, 10);
       setup.preppedDate = $("preppedDate").value;
     }
+  }
+
+  /* ---------------- clinical grades ---------------- */
+
+  function gradeError(text) {
+    var box = $("gradeError");
+    box.textContent = text || "";
+    box.hidden = !text;
+  }
+
+  function renderGrades() {
+    var list = $("gradeList");
+    list.textContent = "";
+    grades().forEach(function (g, i) {
+      var row = document.createElement("div");
+      row.className = "grade";
+
+      var order = document.createElement("span");
+      order.className = "grade-order";
+      order.textContent = String(i + 1);
+      row.appendChild(order);
+
+      [["name", "Full name", "grade-name"], ["abbr", "Short label", "grade-abbr"]]
+        .forEach(function (spec) {
+          var field = document.createElement("label");
+          field.className = "grade-field " + spec[2];
+          var cap = document.createElement("span");
+          cap.textContent = spec[1];
+          var input = document.createElement("input");
+          input.type = "text";
+          input.value = g[spec[0]] || "";
+          input.setAttribute("aria-label", spec[1] + " for grade " + (i + 1));
+          input.addEventListener("input", function () {
+            g[spec[0]] = input.value;
+            gradeError("");
+            touch();
+            save();
+            renderMatrix();
+          });
+          field.appendChild(cap);
+          field.appendChild(input);
+          row.appendChild(field);
+        });
+
+      var btns = document.createElement("div");
+      btns.className = "grade-btns";
+      [["\u2191", function () { moveGrade(i, -1); }, ""],
+       ["\u2193", function () { moveGrade(i, 1); }, ""],
+       ["Remove", function () { removeGrade(i); }, "del"]].forEach(function (spec) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "icon-btn " + spec[2];
+        b.textContent = spec[0];
+        b.addEventListener("click", spec[1]);
+        btns.appendChild(b);
+      });
+      row.appendChild(btns);
+      list.appendChild(row);
+    });
+  }
+
+  function moveGrade(index, delta) {
+    var to = index + delta;
+    var list = grades();
+    if (to < 0 || to >= list.length) return;
+    list.splice(to, 0, list.splice(index, 1)[0]);
+    touch();
+    save();
+    renderGrades();
+    renderMatrix();
+  }
+
+  function removeGrade(index) {
+    var list = grades();
+    var g = list[index];
+    if (!confirm("Remove the grade \u201c" + (g.name || "untitled") +
+                 "\u201d and everything ticked against it?")) return;
+    list.splice(index, 1);
+    // Leave no orphaned permissions behind.
+    state.docs.matrix.medications.forEach(function (m) {
+      if (m.allow) delete m.allow[g.id];
+    });
+    touch();
+    save();
+    renderGrades();
+    renderMatrix();
+  }
+
+  function addGrade() {
+    grades().push({ id: newGradeId(), name: "", abbr: "" });
+    touch();
+    save();
+    renderGrades();
+    renderMatrix();
+    var inputs = $("gradeList").querySelectorAll(".grade-name input");
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }
+
+  function restoreDefaultGrades() {
+    if (!confirm("Replace the grade list with the default one? Anything ticked against your " +
+                 "current grades is lost.")) return;
+    state.docs.matrix.grades = defaultGrades();
+    state.docs.matrix.medications.forEach(function (m) { m.allow = {}; });
+    touch();
+    save();
+    renderGrades();
+    renderMatrix();
+  }
+
+  /* Grades with nothing in the name box cannot be a column heading. */
+  function namedGrades() {
+    return grades().filter(function (g) { return (g.name || "").trim(); });
+  }
+
+  /* ---------------- the matrix ---------------- */
+
+  function fillMode() {
+    var picked = document.querySelector("[name=fillMode]:checked");
+    return picked ? picked.value : "toggle";
+  }
+
+  function allowed(med, gradeId) {
+    return !!(med.allow && med.allow[gradeId]);
+  }
+
+  function setAllowed(med, gradeId, value) {
+    if (!med.allow) med.allow = {};
+    if (value) med.allow[gradeId] = true;
+    else delete med.allow[gradeId];
+  }
+
+  /*
+   * A click means different things depending on the fill mode. "This grade and
+   * above" is the one that matters: formularies are usually written as "from
+   * paramedic upwards", and setting eleven cells one at a time is the tedium
+   * this exists to remove.
+   */
+  function cellClicked(med, index) {
+    var list = grades();
+    var mode = fillMode();
+    if (mode === "toggle") {
+      setAllowed(med, list[index].id, !allowed(med, list[index].id));
+    } else {
+      var from = mode === "up" ? index : 0;
+      var to = mode === "up" ? list.length - 1 : index;
+      list.forEach(function (g, i) { setAllowed(med, g.id, i >= from && i <= to); });
+    }
+    touch();
+    save();
+    renderMatrix();
+  }
+
+  function fillRow(med) {
+    var list = grades();
+    var all = list.every(function (g) { return allowed(med, g.id); });
+    list.forEach(function (g) { setAllowed(med, g.id, !all); });
+    touch();
+    save();
+    renderMatrix();
+  }
+
+  function fillColumn(gradeId) {
+    var meds = state.docs.matrix.medications;
+    var all = meds.every(function (m) { return allowed(m, gradeId); });
+    meds.forEach(function (m) { setAllowed(m, gradeId, !all); });
+    touch();
+    save();
+    renderMatrix();
+  }
+
+  function renderMatrix() {
+    if (!isMatrixMode()) return;
+    var table = $("matrixTable");
+    var meds = state.docs.matrix.medications;
+    var list = namedGrades();
+    table.textContent = "";
+    $("matrixEmpty").hidden = !(meds.length === 0 || list.length === 0);
+    $("matrixEmpty").textContent = meds.length === 0
+      ? "Add medications above and they appear here, one row each."
+      : "Name at least one clinical grade on the setup tab to build the matrix.";
+    if (!meds.length || !list.length) return;
+
+    var head = document.createElement("tr");
+    var corner = document.createElement("th");
+    corner.className = "m-med";
+    corner.textContent = "Medication";
+    head.appendChild(corner);
+    list.forEach(function (g) {
+      var th = document.createElement("th");
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "m-head";
+      b.textContent = (g.abbr || g.name).trim();
+      b.title = "Fill the whole " + g.name + " column";
+      b.addEventListener("click", function () { fillColumn(g.id); });
+      th.appendChild(b);
+      head.appendChild(th);
+    });
+    table.appendChild(head);
+
+    meds.forEach(function (m) {
+      var tr = document.createElement("tr");
+      var thead = document.createElement("th");
+      thead.className = "m-med";
+      var rowBtn = document.createElement("button");
+      rowBtn.type = "button";
+      rowBtn.className = "m-row";
+      rowBtn.textContent = m.name;
+      rowBtn.title = "Fill the whole row";
+      rowBtn.addEventListener("click", function () { fillRow(m); });
+      thead.appendChild(rowBtn);
+      tr.appendChild(thead);
+
+      list.forEach(function (g) {
+        var td = document.createElement("td");
+        var on = allowed(m, g.id);
+        var cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = "m-cell " + (on ? "yes" : "no");
+        cell.textContent = on ? "\u2713" : "\u2717";
+        cell.setAttribute("aria-label",
+          m.name + ", " + g.name + ": " + (on ? "allowed" : "not allowed"));
+        cell.setAttribute("aria-pressed", on ? "true" : "false");
+        cell.addEventListener("click", function () {
+          cellClicked(m, grades().indexOf(g));
+        });
+        td.appendChild(cell);
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
   }
 
   /* ---------------- company profile ---------------- */
@@ -674,22 +996,31 @@
 
   /* ---------------- medications ---------------- */
   function medFromForm() {
-    return {
+    var m = {
       name: $("mName").value.trim(),
       presentation: $("mPresentation").value.trim(),
       dose: $("mDose").value.trim(),
-      batch: $("mBatch").value.trim(),
-      expiry: expiryValue(),
-      doses: parseInt($("mDoses").value, 10),
-      schedule: isCdMode() ? "CD" : $("mSchedule").value,
-      unit: isCdMode() ? ($("mUnit").value.trim() || "ampoules") : ""
+      schedule: isCdMode() ? "CD" : $("mSchedule").value
     };
+    if (isMatrixMode()) {
+      m.indication = $("mIndication").value.trim();
+      // Permissions belong to the entry, and survive an edit of its details.
+      m.allow = (state.editing !== null && doc().medications[state.editing].allow) || {};
+      return m;
+    }
+    m.batch = $("mBatch").value.trim();
+    m.expiry = expiryValue();
+    m.doses = parseInt($("mDoses").value, 10);
+    m.unit = isCdMode() ? ($("mUnit").value.trim() || "ampoules") : "";
+    return m;
   }
 
   function validateMed(m) {
     if (!m.name) return "Enter the medication name.";
+    if (isMatrixMode() && !m.indication) return "Enter what the medication is given for.";
     if (!m.presentation) return "Enter the presentation (tablet, sachet, ampoule…).";
     if (!m.dose) return "Enter the dose or strength.";
+    if (isMatrixMode()) return null;
     if (!m.expiry) {
       return expiryPrecision() === "day" ? "Pick the expiry date." : "Pick the expiry month.";
     }
@@ -704,7 +1035,7 @@
   }
 
   function clearMedForm() {
-    ["mName", "mPresentation", "mDose", "mBatch", "mDoses"].forEach(function (id) {
+    ["mName", "mPresentation", "mDose", "mBatch", "mDoses", "mIndication"].forEach(function (id) {
       $(id).value = "";
     });
     $("mExpiryPrecision").value = "month";
@@ -725,9 +1056,10 @@
     $("mName").value = m.name;
     $("mPresentation").value = m.presentation;
     $("mDose").value = m.dose;
-    $("mBatch").value = m.batch;
-    setExpiryValue(m.expiry);
-    $("mDoses").value = m.doses;
+    $("mIndication").value = m.indication || "";
+    $("mBatch").value = m.batch || "";
+    setExpiryValue(m.expiry || "");
+    $("mDoses").value = m.doses || "";
     $("mSchedule").value = m.schedule || "GSL";
     $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
     updateExpiryEcho();
@@ -821,7 +1153,8 @@
       name.appendChild(tag);
       name.appendChild(document.createTextNode(m.name));
 
-      if (doc().medications.filter(function (o) { return o.name === m.name; }).length > 1) {
+      if (isStockMode() &&
+          doc().medications.filter(function (o) { return o.name === m.name; }).length > 1) {
         var multi = document.createElement("span");
         multi.className = "chip batch";
         multi.textContent = "batch " + (m.batch || "—");
@@ -829,7 +1162,9 @@
       }
 
       var parsed = window.Expiry.parse(m.expiry);
-      var st = window.Expiry.serviceStatus(parsed, doc().setup.inServiceUntil);
+      var st = isStockMode()
+        ? window.Expiry.serviceStatus(parsed, doc().setup.inServiceUntil)
+        : "unknown";
       if (st !== "ok" && st !== "unknown") {
         var chip = document.createElement("span");
         chip.className = "chip " + (st === "soon" ? "warn" : "bad");
@@ -841,28 +1176,33 @@
 
       var meta = document.createElement("div");
       meta.className = "med-meta";
-      meta.textContent = m.presentation + " · " + m.dose + " · x" + m.doses +
-        (isCdMode() ? " " + (m.unit || "held") : " dose" + (m.doses === 1 ? "" : "s")) +
-        " · batch " + (m.batch || "—") +
-        " · exp " + window.Expiry.format(parsed, m.expiry);
+      meta.textContent = isMatrixMode()
+        ? m.presentation + " · " + m.dose + " · " +
+          (m.indication || "").split(/\n+/).filter(Boolean).join("; ")
+        : m.presentation + " · " + m.dose + " · x" + m.doses +
+          (isCdMode() ? " " + (m.unit || "held") : " dose" + (m.doses === 1 ? "" : "s")) +
+          " · batch " + (m.batch || "—") +
+          " · exp " + window.Expiry.format(parsed, m.expiry);
       main.appendChild(name);
       main.appendChild(meta);
 
       var btns = document.createElement("div");
       btns.className = "med-btns";
       [["↑", function () { move(i, -1); }, ""],
-       ["↓", function () { move(i, 1); }, ""],
-       ["Copy", function () { copyForNewBatch(i); }, ""],
+       ["↓", function () { move(i, 1); }, ""]]
+      .concat(isStockMode() ? [["Copy", function () { copyForNewBatch(i); }, ""]] : [])
+      .concat([
        ["Edit", function () { startEdit(i); }, ""],
        ["Delete", function () {
-          if (confirm("Remove " + m.name + " from this bag?")) {
+          if (confirm("Remove " + m.name + " from this " +
+              (isMatrixMode() ? "formulary" : isCdMode() ? "register" : "bag") + "?")) {
             doc().medications.splice(i, 1);
             if (state.editing === i) clearMedForm();
             touch();
             save();
             renderMeds();
           }
-        }, "del"]].forEach(function (spec) {
+        }, "del"]]).forEach(function (spec) {
         var b = document.createElement("button");
         b.type = "button";
         b.className = "icon-btn " + spec[2];
@@ -880,7 +1220,15 @@
     $("medCount").textContent = n;
     $("medCount2").textContent = n;
     $("medEmpty").hidden = n > 0;
+    renderMatrix();
     renderSummary();
+  }
+
+  function tickedCells() {
+    var list = namedGrades();
+    return state.docs.matrix.medications.reduce(function (total, m) {
+      return total + list.filter(function (g) { return allowed(m, g.id); }).length;
+    }, 0);
   }
 
   function renderSummary() {
@@ -889,16 +1237,26 @@
     }, 0);
     var until = doc().setup.inServiceUntil;
     var first = window.Expiry.earliest(doc().medications);
-    var items = [
-      [words().summaryId, doc().setup.bagNumber || "—"],
-      ["Company", doc().setup.companyName || "—"],
-      [isCdMode() ? "Earliest expiry" : "Bag expires",
-        first ? window.Expiry.format(first.parsed) : "—",
-        first ? window.Expiry.serviceStatus(first.parsed, until) : "unknown"],
-      [isCdMode() ? "Controlled drugs" : "Medications", String(doc().medications.length)],
-      [isCdMode() ? "Total quantity held" : "Total logged doses", String(totalDoses)],
-      ["Pages", String((isCdMode() ? 2 : 1) + doc().medications.length) + "+"]
-    ];
+    var items = isMatrixMode()
+      ? [
+          [words().summaryId, doc().setup.bagNumber || "—"],
+          ["Company", doc().setup.companyName || "—"],
+          ["Review date", until
+            ? window.Expiry.format(window.Expiry.parse(until), until) : "—"],
+          ["Medications", String(doc().medications.length)],
+          ["Clinical grades", String(namedGrades().length)],
+          ["Cells ticked", String(tickedCells())]
+        ]
+      : [
+          [words().summaryId, doc().setup.bagNumber || "—"],
+          ["Company", doc().setup.companyName || "—"],
+          [isCdMode() ? "Earliest expiry" : "Bag expires",
+            first ? window.Expiry.format(first.parsed) : "—",
+            first ? window.Expiry.serviceStatus(first.parsed, until) : "unknown"],
+          [isCdMode() ? "Controlled drugs" : "Medications", String(doc().medications.length)],
+          [isCdMode() ? "Total quantity held" : "Total logged doses", String(totalDoses)],
+          ["Pages", String((isCdMode() ? 2 : 1) + doc().medications.length) + "+"]
+        ];
     var box = $("summary");
     box.textContent = "";
     items.forEach(function (it) {
@@ -938,6 +1296,23 @@
     var names = function (list) {
       return list.map(function (m) { return m.name; }).join(", ");
     };
+    if (isMatrixMode()) {
+      // Nothing expires in a formulary; a row nobody can give is the mistake.
+      var nobody = doc().medications.filter(function (m) {
+        return !namedGrades().some(function (g) { return allowed(m, g.id); });
+      });
+      if (nobody.length) {
+        warn.className = "notice warn";
+        warn.textContent = nobody.length +
+          (nobody.length === 1 ? " medication has" : " medications have") +
+          " no grade ticked, so nobody may give " +
+          (nobody.length === 1 ? "it" : "them") + ": " + names(nobody) + ".";
+        warn.hidden = false;
+      } else {
+        warn.hidden = true;
+      }
+      return;
+    }
     var expired = doc().medications.filter(function (m) {
       return window.Expiry.status(window.Expiry.parse(m.expiry)) === "expired";
     });
@@ -1017,6 +1392,9 @@
         ? "Add at least one controlled drug before generating."
         : "Add at least one medication before generating." };
     }
+    if (isMatrixMode() && !namedGrades().length) {
+      return { error: "Name at least one clinical grade on the setup tab before generating." };
+    }
     var data = {};
     SETUP_FIELDS.forEach(function (f) { data[f] = doc().setup[f] || ""; });
     data.cqcRegistered = !!doc().setup.cqcRegistered;
@@ -1025,6 +1403,7 @@
     data.logoH = doc().setup.logoH || 0;
     data.medications = doc().medications;
     data.mode = state.mode;
+    if (isMatrixMode()) data.grades = namedGrades();
     return { data: data };
   }
 
@@ -1049,10 +1428,10 @@
   /* ---------------- import / export ---------------- */
   /* "Drug bag 1" exports as Drug-Bag-1-saved.json, a safe as CD-Register-1-saved.json */
   function exportName() {
-    var prefix = isCdMode() ? "CD-Register-" : "Drug-Bag-";
+    var prefix = isMatrixMode() ? "Formulary-" : isCdMode() ? "CD-Register-" : "Drug-Bag-";
     var id = (doc().setup.bagNumber || "")
       .trim()
-      .replace(/^(cd\s*safe|safe|drug\s*bag|bag|db)[\s._-]*/i, "")  // no "Drug-Bag-Drug-Bag-1"
+      .replace(/^(formulary|cd\s*safe|safe|drug\s*bag|bag|db)[\s._-]*/i, "")
       .replace(/[^A-Za-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
     return prefix + (id || "unnumbered") + "-saved.json";
@@ -1061,7 +1440,8 @@
   function exportBag() {
     readSetup();
     var blob = new Blob([JSON.stringify({
-      mode: state.mode, setup: doc().setup, medications: doc().medications
+      mode: state.mode, setup: doc().setup, medications: doc().medications,
+      grades: isMatrixMode() ? grades() : undefined
     }, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
@@ -1121,9 +1501,13 @@
         return;
       }
 
-      if (parsed.mode === "cd" || parsed.mode === "bag") state.mode = parsed.mode;
+      if (MODES.indexOf(parsed.mode) >= 0) state.mode = parsed.mode;
       doc().setup = parsed.setup || {};
       doc().medications = Array.isArray(parsed.medications) ? parsed.medications : [];
+      if (isMatrixMode()) {
+        doc().grades = Array.isArray(parsed.grades) && parsed.grades.length
+          ? parsed.grades : null;
+      }
       doc().meta = { exportedAt: Date.now() };
       applyMode();
       fillSetup();
@@ -1259,6 +1643,19 @@
       this.value = "";
     });
 
+    $("gradeAdd").addEventListener("click", addGrade);
+    $("gradeDefaults").addEventListener("click", restoreDefaultGrades);
+    document.querySelectorAll("[name=fillMode]").forEach(function (r) {
+      r.addEventListener("change", function () {
+        $("fillModeHint").textContent =
+          r.value === "up"
+            ? "A click allows that grade and every grade to its right, and clears the rest."
+            : r.value === "down"
+              ? "A click allows that grade and every grade to its left, and clears the rest."
+              : "A click flips a single cell between allowed and not.";
+      });
+    });
+
     $("logoBtn").addEventListener("click", function () { $("logoFile").click(); });
     $("logoFile").addEventListener("change", function () {
       if (this.files && this.files[0]) readLogo(this.files[0]);
@@ -1287,6 +1684,7 @@
       doc().setup = {};
       doc().medications = [];
       doc().meta = {};
+      if (isMatrixMode()) doc().grades = null;
       $("companyResult").hidden = true;
       showLogo();
       resetLogoHint();
