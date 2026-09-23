@@ -251,11 +251,11 @@ async function testMatrix(page) {
   page.on("pageerror", e => errors.push(e.message));
 
   await page.evaluate(() => localStorage.clear());
-  await page.reload();
-  await page.check('input[name=docMode][value=matrix]');
+  await page.goto("http://localhost:" + PORT + "/matrix.html");
 
   // Grades start from a default list, and are all editable.
-  check("a formulary offers clinical grades", await page.isVisible("#gradesCard"));
+  check("the matrix has its own generator",
+    await page.locator("#gradesCard").isVisible());
   eq("with a starting list", await page.locator("#gradeList .grade").count(), 11);
   eq("in the order given", await page.locator(".grade-name input").first().inputValue(),
     "First responder");
@@ -397,13 +397,120 @@ async function testMatrix(page) {
   check("which spells the abbreviations out", built.expands);
   check("and an approval block", built.approval);
 
-  // Switching away and back leaves the formulary alone.
-  await page.click('[data-tab="setup"]');
-  await page.check('input[name=docMode][value=bag]');
-  check("bag mode hides the grades", await page.locator("#gradesCard").isHidden());
-  await page.check('input[name=docMode][value=matrix]');
-  eq("and the formulary is still there", await page.inputValue("#bagNumber"), "2026-v1");
+  // Leaving for the bag paperwork and coming back leaves the formulary alone.
+  await page.click("#bagLink");
+  await page.waitForSelector("body[data-ready]");
+  check("the bag page is a separate generator",
+    await page.locator("#gradesCard").count() === 0);
+  check("with its own document type", await page.isVisible('input[name=docMode][value=bag]'));
+  check("and no matrix mode hidden in it",
+    await page.locator('input[name=docMode][value=matrix]').count() === 0);
+  await page.click("#matrixLink");
+  await page.waitForSelector("body[data-ready]");
+  eq("the formulary is still there", await page.inputValue("#bagNumber"), "2026-v1");
   eq("with its medications", await page.textContent("#medCount"), "2");
+
+  check("no page errors", errors.length === 0, errors.join("; "));
+  return saved;
+}
+
+/* ---------------- attaching a matrix to a drug bag ---------------------- */
+async function testAttach(page, formulary) {
+  console.log("\nattaching a matrix to a bag");
+  const errors = [];
+  page.removeAllListeners("dialog");
+  page.removeAllListeners("pageerror");
+  page.on("dialog", d => d.accept());
+  page.on("pageerror", e => errors.push(e.message));
+
+  await page.goto("http://localhost:" + PORT + "/index.html");
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.fill("#companyName", "Test Medical Ltd");
+  await page.fill("#companyPhone", "01234 567890");
+  await page.fill("#bagNumber", "7");
+  await page.fill("#preppedBy", "F. Smith");
+  await page.click('[data-tab="meds"]');
+  await page.fill("#mName", "Paracetamol");
+  await page.fill("#mPresentation", "Tablet");
+  await page.fill("#mDose", "500mg");
+  await page.fill("#mExpiryMonth", "2027-10");
+  await page.fill("#mDoses", "8");
+  await page.click("#medSubmit");
+
+  // A bag with no matrix prints what it always did.
+  const plain = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    return window.DrugBagPDF.build(Object.assign({}, st.docs.bag.setup,
+      { medications: st.docs.bag.medications, mode: "bag" }))
+      .internal.getNumberOfPages();
+  });
+  eq("a bag without a matrix is label plus logs", plain, 2);
+
+  await page.click('[data-tab="setup"]');
+  await page.setInputFiles("#formularyFile", formulary);
+  await page.waitForSelector("#formularyResult:not([hidden])");
+  check("a formulary can be attached to a bag",
+    (await page.textContent("#formularyResult")).includes("2026-v1"));
+  check("and says what it holds",
+    (await page.textContent("#formularyResult")).includes("2 medications"));
+
+  const attached = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    const bag = st.docs.bag;
+    const doc = window.DrugBagPDF.build(Object.assign({}, bag.setup,
+      { medications: bag.medications, mode: "bag", formulary: bag.formulary }));
+    const n = doc.internal.getNumberOfPages();
+    return {
+      pages: n,
+      stored: !!bag.formulary,
+      landscape: doc.internal.pages[n].join("\n").indexOf("DRUG MATRIX") >= 0
+    };
+  });
+  check("it is kept with the bag", attached.stored);
+  eq("and adds its sheet to the bag's PDF", attached.pages, 3);
+  check("which is the matrix", attached.landscape);
+
+  // Exporting the bag carries the matrix with it.
+  await page.click('[data-tab="generate"]');
+  const [file] = await Promise.all([
+    page.waitForEvent("download"), page.click("#exportBtn")]);
+  const savedBag = path.join(os.tmpdir(), "smoke-bag-with-matrix.json");
+  await file.saveAs(savedBag);
+  const parsed = JSON.parse(fs.readFileSync(savedBag, "utf8"));
+  check("an exported bag carries its matrix",
+    !!parsed.formulary && parsed.formulary.medications.length === 2);
+
+  // Importing a formulary on the bag side attaches rather than replaces.
+  await page.click('[data-tab="setup"]');
+  await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    delete st.docs.bag.formulary;
+    localStorage.setItem("drug-bag-tracker/v2", JSON.stringify(st));
+  });
+  await page.reload();
+  await page.setInputFiles("#importFile", formulary);
+  await page.waitForSelector("#importResult:not([hidden])");
+  check("importing a formulary here attaches it instead of replacing the bag",
+    (await page.textContent("#importResult")).includes("attached"));
+  eq("so the bag keeps its own medications", await page.textContent("#medCount"), "1");
+
+  // And the matrix generator refuses a bag.
+  await page.goto("http://localhost:" + PORT + "/matrix.html");
+  await page.setInputFiles("#importFile", savedBag);
+  await page.waitForSelector("#importResult:not([hidden])");
+  check("the matrix generator refuses a saved bag",
+    (await page.textContent("#importResult")).includes("not a formulary"));
+
+  // Removing it puts the bag back to plain paperwork.
+  await page.goto("http://localhost:" + PORT + "/index.html");
+  await page.click("#formularyRemove");
+  await page.waitForSelector("#formularyRemove", { state: "hidden" });
+  const gone = await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem("drug-bag-tracker/v2"));
+    return !st.docs.bag.formulary;
+  });
+  check("and it can be removed again", gone);
 
   check("no page errors", errors.length === 0, errors.join("; "));
 }
@@ -870,7 +977,8 @@ function serve() {
   try {
     await testPdfs(page);
     await testApp(page);
-    await testMatrix(page);
+    const formulary = await testMatrix(page);
+    await testAttach(page, formulary);
   } finally {
     await browser.close();
     server.close();

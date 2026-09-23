@@ -9,15 +9,21 @@ Made by Finlay Russell — <finlay3110@gmail.com>
 > See [DISCLAIMER.md](DISCLAIMER.md) in full before using it.
 
 A browser-based tool for ambulance and event-medical companies to produce
-medication records as A4 PDFs. It makes two separate documents:
+medication records as A4 PDFs. It makes three separate documents:
 
-- a **drug bag** label and usage log, and
+- a **drug bag** label and usage log,
 - a **controlled drugs register** for stock held in the CD safe, and
 - a **drug matrix**: which clinical grades may give which medication.
 
 Controlled drugs are never carried in the drug bag, so the two are kept
 completely apart: each has its own details, its own list and its own export.
-Pick the document type at the top of the setup tab.
+Pick between them at the top of the setup tab.
+
+The drug matrix is a different kind of document again — what may be given, not
+what is held — so it is a **separate generator** on its own page, `matrix.html`,
+opened with the **Drug matrix** button in the top bar (and its own button back).
+A matrix exported from there can be attached to a bag or register, and that
+document's PDF then carries the table too.
 
 Everything runs locally in the browser — no server, no upload, no network calls.
 The PDF is built with [jsPDF](https://github.com/parallax/jsPDF), bundled in
@@ -26,11 +32,12 @@ The PDF is built with [jsPDF](https://github.com/parallax/jsPDF), bundled in
 ## Using it
 
 Open `index.html` in a browser (double-click it, or serve the folder with any
-static host). There are three tabs:
+static host), and `matrix.html` for the drug matrix — each page has a button to
+the other. Both have three tabs:
 
-1. **Setup** — the document type, an import button to start from a bag or
-   register saved earlier, then company details and the details of the
-   bag or safe. A drug bag takes a bag number, who prepped and checked it, the
+1. **Setup** (**Formulary** on the matrix page) — the document type, an import
+   button to start from something saved earlier, then company details and the
+   details of the bag, safe or formulary. A drug bag takes a bag number, who prepped and checked it, the
    prepped date and an optional seal number; a CD safe takes a safe reference,
    its location, the accountable officer and a witness.
 2. **Medications** — add each item with its presentation, dose/strength, batch
@@ -75,9 +82,14 @@ letting it be added.
 
 ### The drug matrix
 
-A formulary: one row per medication, one column per clinical grade, every cell
+`matrix.html`, opened with the **Drug matrix** button in the top bar. A
+formulary: one row per medication, one column per clinical grade, every cell
 either allowed or not. It produces a colour-coded landscape table with a green
 tick or a red cross in each cell.
+
+It is its own generator, with its own saved work: the two pages share storage
+but each only ever writes its own documents, so both can be open at once without
+either losing the other's work.
 
 **Grades are yours.** A default list is offered — first responder, FREC 3,
 emergency care assistant, FREC 4, AAP, EMT, FREUC 5, paramedic, APP, nurse,
@@ -96,6 +108,16 @@ an indication — one per line becomes a bulleted list — instead of a batch,
 expiry and quantity. More grades than fit across one sheet continue on further
 sheets, with the medication columns repeated and the heading saying which grades
 they cover.
+
+**Attaching it to a bag.** Export the matrix as JSON, then attach that file to a
+drug bag or CD register — either on the **Drug matrix (optional)** card on the
+setup tab, or simply by importing it there, which attaches rather than replacing
+the open document. The bag's PDF then ends with the matrix sheets, wearing the
+bag's company details and logo but keeping the formulary's own reference,
+approval names and dates, and numbered as part of the same document. What is
+attached is a copy taken at that moment, so a bag that has gone out keeps the
+version it was prepared against; the bag's own export carries that copy with it.
+**Remove** takes it off again and leaves the formulary itself untouched.
 
 ### Company profile
 
@@ -246,9 +268,11 @@ Screen only — the generated PDF is a printed document and stays light.
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | Page structure and the three tabs |
+| `index.html` | The drug bag / CD generator |
+| `matrix.html` | The drug matrix generator |
+| `parts.js` | Markup both pages share, kept in one place |
 | `styles.css` | Styling, including the mobile layout |
-| `app.js` | Form state, validation, storage, import/export |
+| `app.js` | Form state, validation, storage, import/export, for both pages |
 | `expiry.js` | Expiry parsing and expired / expiring-soon status |
 | `medicines.js` | Quick-add catalogue and its search |
 | `pdf.js` | A4 PDF generation (label page + usage logs) |
@@ -261,7 +285,7 @@ Screen only — the generated PDF is a printed document and stays light.
 
 ## User guide
 
-A 20-page illustrated guide is generated from the app itself, so its screenshots
+A 28-page illustrated guide is generated from the app itself, so its screenshots
 are never out of date:
 
 ```
@@ -285,7 +309,8 @@ npm test
 `test/smoke.js` checks the expiry parser directly against `expiry.js`, then
 drives the app in Chromium: adding and rejecting entries, copying a batch,
 switching document type without disturbing the other document, export names, the
-backup warning, and reload persistence. It also builds both PDFs and reads back
+backup warning, reload persistence, the matrix generator on its own page, and
+attaching a formulary to a bag. It also builds both PDFs and reads back
 jsPDF's page content streams to assert the page count and that nothing is drawn
 below the bottom margin — which is what catches a pagination regression.
 

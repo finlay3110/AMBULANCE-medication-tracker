@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Drug Matrix</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f4e91'/%3E%3Cpath d='M6 8h20v4H6zm0 6h20v4H6zm0 6h20v4H6z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+<script>
+  /* Applied before first paint so a chosen dark theme does not flash light.
+     app.js owns the toggle; this only restores what was stored. */
+  try {
+    var t = localStorage.getItem("drug-bag-tracker/theme");
+    if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) { /* private browsing: fall back to the system preference */ }
+</script>
+</head>
+<body data-modes="matrix" data-page="matrix">
+<header class="topbar">
+  <div class="brand">
+    <span class="cross" aria-hidden="true">&#9636;</span>
+    <div>
+      <h1>Drug Matrix</h1>
+      <p>Which clinical grades may give which medication</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <a class="btn ghost" href="index.html" id="bagLink">&larr; Drug bag paperwork</a>
+    <button type="button" class="btn ghost" id="themeBtn" aria-live="polite">Theme: auto</button>
+    <button type="button" class="btn ghost" id="resetAll">Clear all</button>
+    <button type="button" class="btn primary" id="generateTop">Generate PDF</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" role="tab" data-tab="setup" aria-selected="true">1. Formulary</button>
+  <button class="tab" role="tab" data-tab="meds" aria-selected="false"><span id="tabMedsLabel">2. Medications</span> <span class="pill" id="medCount">0</span></button>
+  <button class="tab" role="tab" data-tab="generate" aria-selected="false">3. Generate</button>
+</nav>
+
+<main>
+  <!-- ============ FORMULARY DETAILS ============ -->
+  <section class="panel active" id="panel-setup" role="tabpanel">
+    <div class="card">
+      <h2>What this makes</h2>
+      <p class="hint">A drug matrix &mdash; a formulary &mdash; sets out which clinical grades may
+        give which medication. It records no batch numbers, expiry dates or quantities, because it
+        describes what is allowed rather than what is held. That is why it is kept apart from the
+        <a href="index.html">drug bag paperwork</a>, with its own list and its own saved file.</p>
+      <p class="hint">Export the finished matrix as a .json and it can be attached to a drug bag or
+        CD register, so that document's PDF carries the table too.</p>
+    </div>
+
+    <div class="card">
+      <h2>Start from a saved file</h2>
+      <p class="hint">Load a formulary you exported earlier, then amend it. Only a formulary can be
+        loaded here &mdash; a saved bag or register belongs in the
+        <a href="index.html">drug bag generator</a>.</p>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="importSetupBtn">Import (.json)</button>
+      </div>
+      <p class="notice" id="importResult" hidden></p>
+    </div>
+
+    <div data-part="company"></div>
+
+    <div class="card">
+      <h2 id="detailsTitle">Formulary details</h2>
+      <div class="grid">
+        <label class="field" id="f-bagNumber">
+          <span>Formulary reference <b>*</b></span>
+          <input type="text" id="bagNumber" placeholder="e.g. 2026-v1">
+        </label>
+        <label class="field" id="f-preppedBy">
+          <span>Approved by <b>*</b></span>
+          <input type="text" id="preppedBy" placeholder="Name of the person who approved this formulary">
+        </label>
+        <label class="field" id="f-preppedDate">
+          <span>Approved date</span>
+          <input type="date" id="preppedDate">
+        </label>
+        <label class="field" id="f-inServiceUntil">
+          <span>Review date</span>
+          <input type="date" id="inServiceUntil">
+          <small class="echo" id="inServiceHint">Optional. Printed on the matrix so it is obvious
+            when it is due a review.</small>
+        </label>
+        <label class="field span2" id="f-checkedBy">
+          <span>Checked by</span>
+          <input type="text" id="checkedBy" placeholder="Second person who checked it (optional)">
+          <small class="echo" id="checkedByHint">The matrix carries an approved-by / checked-by
+            signature block.</small>
+        </label>
+      </div>
+    </div>
+
+    <div class="card" id="gradesCard">
+      <h2>Clinical grades</h2>
+      <p class="hint">One column per grade, in this order, left to right. Organisations differ,
+        so rename, reorder, remove or add whatever you actually use. The short label is what
+        fits in the column heading; the full name is printed in the key beneath the table.</p>
+      <div id="gradeList" class="grade-list"></div>
+      <p class="error" id="gradeError" hidden></p>
+      <div class="actions">
+        <button type="button" class="btn primary small" id="gradeAdd">Add grade</button>
+        <button type="button" class="btn ghost small" id="gradeDefaults">Restore the default list</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn primary" data-goto="meds">Next: Medications &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ============ MEDICATIONS ============ -->
+  <section class="panel" id="panel-meds" role="tabpanel">
+    <div data-part="quickadd"></div>
+
+    <div data-part="medform"></div>
+
+    <div data-part="medlist"></div>
+
+    <div class="card" id="matrixCard">
+      <h2>Who can give what</h2>
+      <p class="hint">Click a cell to change it. Click a medication name to fill its whole row,
+        or a grade heading to fill that whole column.</p>
+      <div class="fill-modes" role="radiogroup" aria-label="What a click does">
+        <label><input type="radio" name="fillMode" value="toggle" checked> Toggle one</label>
+        <label><input type="radio" name="fillMode" value="up"> This grade and above</label>
+        <label><input type="radio" name="fillMode" value="down"> This grade and below</label>
+      </div>
+      <p class="hint" id="fillModeHint">A click flips a single cell between allowed and not.</p>
+      <div class="matrix-scroll"><table class="matrix" id="matrixTable"></table></div>
+      <p class="empty" id="matrixEmpty">Add medications and clinical grades to build the matrix.</p>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn ghost" data-goto="setup">&larr; Back</button>
+      <button type="button" class="btn primary" data-goto="generate">Next: Generate &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ============ GENERATE ============ -->
+  <section class="panel" id="panel-generate" role="tabpanel">
+    <div data-part="generate"></div>
+
+    <div data-part="saveload"></div>
+
+    <div class="actions">
+      <button type="button" class="btn ghost" data-goto="meds">&larr; Back</button>
+    </div>
+  </section>
+</main>
+
+<footer class="foot" data-part="footer"></footer>
+
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="expiry.js"></script>
+<script src="medicines.js"></script>
+<script src="pdf.js"></script>
+<script src="parts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

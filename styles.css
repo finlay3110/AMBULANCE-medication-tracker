@@ -267,6 +267,8 @@ textarea { resize: vertical; }
 .btn.ghost { background: var(--card); color: var(--ink-soft); border-color: var(--line); }
 .btn.ghost:hover { background: var(--soft); }
 .btn.big { padding: 13px 26px; font-size: 16px; }
+/* The link to the other generator is a button, so it needs a button's box. */
+a.btn { display: inline-block; text-decoration: none; line-height: normal; }
 .topbar .btn.ghost { background: transparent; color: var(--head-ghost-ink); border-color: var(--head-ghost-line); }
 .topbar .btn.ghost:hover { background: var(--head-ghost-hover); }
 
@@ -541,7 +543,8 @@ table.matrix tr:first-child th.m-med { background: var(--soft-2); padding: 8px 1
 .m-cell.no { background: #c0392b; }
 .m-cell:hover { outline: 2px solid var(--ink); outline-offset: -3px; }
 
-/* A formulary is neither a bag nor a safe: give it its own colour. */
+/* A formulary is neither a bag nor a safe: give it its own colour. The
+   matrix generator is its own page, so the class is on the body there. */
 body.matrix-mode {
   --accent: #1f4e91; --accent-line: #1f4e91;
   --btn-bg: #1f4e91; --btn-bg-hover: #17406f; --accent-soft: #eef3fa;

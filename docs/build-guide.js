@@ -21,6 +21,7 @@ const BUILD = path.join(__dirname, "build");
 const SHOTS = path.join(BUILD, "shots");
 const PORT = 8741;
 const APP = "http://localhost:" + PORT + "/index.html";
+const MATRIX = "http://localhost:" + PORT + "/matrix.html";
 
 const TYPES = { ".html": "text/html", ".js": "text/javascript",
                 ".css": "text/css", ".json": "application/json", ".png": "image/png" };
@@ -172,9 +173,8 @@ async function capture(browser) {
       { medications: st.docs.cd.medications, mode: "cd" })).output("datauristring");
   })).split(",")[1], "base64"));
 
-  // ---- drug matrix ----
-  await page.click('[data-tab="setup"]');
-  await page.check('input[name=docMode][value=matrix]');
+  // ---- drug matrix (its own page) ----
+  await page.goto(MATRIX);
   await page.fill("#companyName", "Northern Event Medical Ltd");
   await page.fill("#companyPhone", "01234 567890");
   await page.setInputFiles("#logoFile", logo);
@@ -226,6 +226,32 @@ async function capture(browser) {
       { medications: st.docs.matrix.medications, grades: st.docs.matrix.grades,
         mode: "matrix" })).output("datauristring");
   })).split(",")[1], "base64"));
+
+  // ---- attaching that matrix to the drug bag ----
+  const formularyJson = path.join(BUILD, "sample-formulary.json");
+  fs.writeFileSync(formularyJson, await page.evaluate(() => {
+    const m = JSON.parse(localStorage.getItem("drug-bag-tracker/v2")).docs.matrix;
+    return JSON.stringify({ mode: "matrix", setup: m.setup,
+      medications: m.medications, grades: m.grades }, null, 2);
+  }));
+
+  await page.goto(APP);
+  await page.waitForSelector("body[data-ready]");
+  // Back to the drug bag: the CD register was the last thing edited here.
+  await page.check('input[name=docMode][value=bag]');
+  await shot(page.locator(".topbar"), "topbar");
+  await page.setInputFiles("#formularyFile", formularyJson);
+  await page.waitForSelector("#formularyResult:not([hidden])");
+  await shot(page.locator("#formularyBtn").locator("xpath=ancestor::div[@class='card']"),
+    "formulary-attached");
+
+  const bagMatrixPdf = path.join(BUILD, "sample-bag-matrix.pdf");
+  fs.writeFileSync(bagMatrixPdf, Buffer.from((await page.evaluate(() => {
+    const bag = JSON.parse(localStorage.getItem("drug-bag-tracker/v2")).docs.bag;
+    return window.DrugBagPDF.build(Object.assign({}, bag.setup,
+      { medications: bag.medications, mode: "bag", formulary: bag.formulary }))
+      .output("datauristring");
+  })).split(",")[1], "base64"));
   await page.close();
 
   // ---- dark mode and phone ----
@@ -247,7 +273,7 @@ async function capture(browser) {
   await shot(phone, "phone");
   await phone.close();
 
-  return { bagPdf, cdPdf, matrixPdf };
+  return { bagPdf, cdPdf, matrixPdf, bagMatrixPdf };
 }
 
 function renderPdfPages(pdfs) {
@@ -258,7 +284,8 @@ function renderPdfPages(pdfs) {
     pdfs.cdPdf, "1", "pdf-cd-register",
     pdfs.cdPdf, "-2", "pdf-cd-stockcheck",
     pdfs.cdPdf, "-1", "pdf-cd-signout",
-    pdfs.matrixPdf, "0", "pdf-matrix"];
+    pdfs.matrixPdf, "0", "pdf-matrix",
+    pdfs.bagMatrixPdf, "-1", "pdf-bag-matrix"];
   try {
     execFileSync("python3", args, { stdio: "inherit" });
     return true;

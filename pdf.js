@@ -1170,6 +1170,35 @@
 
   /* ------------------------------------------------------------------ */
 
+  /*
+   * A formulary attached to a bag or register, printed after its own pages:
+   * what is held, then who may give it, in one document. The matrix keeps its
+   * own reference, approval names and dates, but wears the document's company
+   * details and logo, because it is that document's paperwork.
+   */
+  function drawAttachedMatrix(doc, data, state) {
+    var f = data.formulary;
+    if (!f || !Array.isArray(f.medications) || !f.medications.length) return;
+    var named = (f.grades || []).filter(function (g) { return txt(g.name); });
+    if (!named.length) return;
+
+    var setup = f.setup || {};
+    drawMatrix(doc, {
+      mode: "matrix",
+      companyName: data.companyName,
+      cqcRegistered: data.cqcRegistered,
+      cqcNumber: data.cqcNumber,
+      logo: data.logo, logoW: data.logoW, logoH: data.logoH,
+      bagNumber: setup.bagNumber,
+      preppedBy: setup.preppedBy,
+      checkedBy: setup.checkedBy,
+      preppedDate: setup.preppedDate,
+      inServiceUntil: setup.inServiceUntil,
+      medications: f.medications,
+      grades: named
+    }, state);
+  }
+
   function build(data) {
     var jsPDF = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
     if (!jsPDF) throw new Error("jsPDF failed to load.");
@@ -1208,6 +1237,7 @@
       drawLabel(doc, data, state);
       data.medications.forEach(function (m) { drawLog(doc, data, m, state); });
     }
+    if (!isMatrixDoc(data)) drawAttachedMatrix(doc, data, state);
     stampFooters(doc, data, state);
     return doc;
   }
