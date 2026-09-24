@@ -183,38 +183,66 @@ async function capture(browser) {
   await page.fill("#preppedBy", "Dr A. Shah");
   await page.fill("#checkedBy", "F. Smith");
   await page.fill("#inServiceUntil", "2027-04-01");
+  // Cut the default list down to the five grades this example organisation
+  // uses, through the tool's own Remove buttons.
+  const keep = ["FREC 3", "FREC 4", "EMT", "Paramedic", "Doctor"];
+  for (let guard = 0; guard < 40; guard += 1) {
+    const names = await page.locator("#gradeList .grade-name input")
+      .evaluateAll(els => els.map(e => e.value));
+    const i = names.findIndex(n => !keep.includes(n));
+    if (i < 0) break;
+    page.once("dialog", d => d.accept());
+    await page.locator(".grade").nth(i).locator(".icon-btn.del").click();
+  }
   await blur();
+  await page.mouse.move(0, 0);
   await shot(page.locator("#gradesCard"), "matrix-grades");
 
   await page.click('[data-tab="meds"]');
+  // "from" is the grade a row starts at, filled with "this grade and above".
   const formulary = [
-    ["paracetamol tablet", "Mild to moderate pain, or a high temperature.\n" +
-                           "Check what the patient has already taken today."],
-    ["glucose gel", "Hypoglycaemia in a patient who can swallow safely."],
-    ["aspirin", "Suspected heart attack, once bleeding risk is considered."],
-    ["salbutamol neb", "Wheeze from asthma or COPD."],
-    ["adrenaline anaphylaxis", "Anaphylaxis."],
-    ["naloxone 2mg pre", "Respiratory depression from opioids."]
+    { manual: { name: "Oxygen", presentation: "Cylinder - medical gas",
+                dose: "Titrated to target saturation", schedule: "POM" },
+      indication: "Hypoxia, and any critically unwell patient.\n" +
+                  "Titrate to the patient's target saturation range.", from: 0 },
+    { query: "paracetamol tablet",
+      indication: "Mild to moderate pain, or a high temperature.\n" +
+                  "Check what the patient has already taken today.", from: 1 },
+    { query: "glucose gel",
+      indication: "Hypoglycaemia in a patient who can swallow safely.", from: 1 },
+    { query: "aspirin",
+      indication: "Suspected heart attack, once bleeding risk is considered.", from: 1 },
+    { query: "salbutamol neb", indication: "Wheeze from asthma or COPD.", from: 2 },
+    { query: "adrenaline anaphylaxis", indication: "Anaphylaxis.", from: 2 },
+    { query: "ondansetron", indication: "Nausea and vomiting.", from: 3 },
+    { query: "naloxone 2mg pre",
+      indication: "Respiratory depression from opioids.", from: 3 }
   ];
-  for (const [query, indication] of formulary) {
-    await page.fill("#quickAdd", query);
-    await page.waitForSelector("#quickResults li");
-    await page.click("#quickResults li:first-child");
-    await page.fill("#mIndication", indication);
+  for (const med of formulary) {
+    if (med.manual) {
+      // Oxygen is not in the catalogue, so it goes in by hand — which is the
+      // escape hatch the guide describes.
+      await page.fill("#mName", med.manual.name);
+      await page.fill("#mPresentation", med.manual.presentation);
+      await page.fill("#mDose", med.manual.dose);
+      await page.selectOption("#mSchedule", med.manual.schedule);
+    } else {
+      await page.fill("#quickAdd", med.query);
+      await page.waitForSelector("#quickResults li");
+      await page.locator("#quickResults li:not(.note)").first().click();
+    }
+    await page.fill("#mIndication", med.indication);
     await page.click("#medSubmit");
   }
   await blur();
   await shot(page.locator("#panel-meds .card").nth(1), "matrix-form");
 
-  // Fill the rows the way the guide describes it: whole rows for the two any
-  // grade may give, then "this grade and above" for the rest.
-  await page.click('#matrixTable tr:nth-child(2) .m-row');
-  await page.click('#matrixTable tr:nth-child(3) .m-row');
+  // Fill each row the way the guide describes it: "this grade and above".
   await page.check('input[name=fillMode][value=up]');
-  await page.click('#matrixTable tr:nth-child(4) td:nth-child(3) .m-cell');
-  await page.click('#matrixTable tr:nth-child(5) td:nth-child(3) .m-cell');
-  await page.click('#matrixTable tr:nth-child(6) td:nth-child(5) .m-cell');
-  await page.click('#matrixTable tr:nth-child(7) td:nth-child(9) .m-cell');
+  for (let r = 0; r < formulary.length; r += 1) {
+    await page.locator(`#matrixTable tr:nth-child(${r + 2}) .m-cell`)
+      .nth(formulary[r].from).click();
+  }
   await blur();
   await shot(page.locator("#matrixCard"), "matrix-grid");
 
