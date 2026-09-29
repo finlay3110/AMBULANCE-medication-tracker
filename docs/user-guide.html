@@ -139,20 +139,33 @@
         for stock taken from the safe into a personal pouch.</li>
       <li><strong>A drug matrix</strong> &mdash; a colour-coded landscape table of which clinical
         grades may give which medication, with a key to the column headings and an approval
-        block.</li>
+        block. It has its own page, reached by the <strong>Drug matrix</strong> button in the top
+        bar, and can be attached to a bag or register so that document carries it too.</li>
     </ul>
     <p>Controlled drugs are held in the CD safe, not in a drug bag, so the two are kept completely
-      apart. Each of the three keeps its own details and its own list, and you can prepare all of
-      them in one sitting without them mixing.</p>
+      apart, and a formulary is not a stock list at all, so it is a separate generator again. Each
+      keeps its own details and its own list, and you can prepare all of them in one sitting
+      without them mixing.</p>
     <p>Everything runs in your browser. Nothing is uploaded, nothing is sent anywhere, and it works
       with no internet connection once the page is open.</p>
   </section>
 
+</div>
+
+<div class="page">
   <section>
     <h2>2. Getting started</h2>
     <p>Open <code>index.html</code> in a browser, or visit the address your organisation hosts it
       at. There is nothing to install and no account to create.</p>
-    <p>Work runs left to right across three tabs:</p>
+    <figure>
+      <img src="build/shots/topbar.png" alt="The top bar">
+      <figcaption>The top bar. <strong>Drug matrix</strong> opens the other generator; the button
+        there brings you back.</figcaption>
+    </figure>
+    <p>There are two generators, each with its own page, its own saved work and its own top-bar
+      button to reach the other. <strong>Drug Bag Tracker</strong> makes the bag and CD paperwork;
+      <strong>Drug matrix</strong> (section 8) makes the formulary. Both work the same way: left to
+      right across three tabs.</p>
     <ol class="steps">
       <li><strong>Setup</strong> &mdash; who you are and which bag or safe this is.</li>
       <li><strong>Medications</strong> &mdash; what is in it.</li>
@@ -176,19 +189,17 @@
     </figure>
 
     <h3>Document type</h3>
-    <p>Pick <strong>Drug bag</strong>, <strong>Controlled drugs (CD safe)</strong> or
-      <strong>Drug matrix</strong> first &mdash; it changes the rest of the form and the document
-      you get at the end. Switching between them does not disturb the others, so you can prepare
-      all three in one sitting. The interface turns dark red on the CD side and blue on the matrix
-      side, so you can tell at a glance which you are editing.</p>
-    <p>On the matrix side the details card asks for a formulary reference, who approved it, who
-      checked it and when it is due for review, and a <strong>Clinical grades</strong> card appears
-      beneath it. Section 8 covers both.</p>
+    <p>Pick <strong>Drug bag</strong> or <strong>Controlled drugs (CD safe)</strong> first &mdash;
+      it changes the rest of the form and the document you get at the end. Switching between them
+      does not disturb the other one, so you can prepare both in one sitting. The whole interface
+      turns dark red on the CD side so you can tell at a glance which you are editing.</p>
 
     <h3>Start from a saved file</h3>
     <p>If you exported a bag or register before, load it here and update the batch numbers and
       expiry dates. That is much the quickest way to prepare a repeat bag. The document type comes
-      from the file, so importing a register while you are on the bag side switches you over.</p>
+      from the file, so importing a register while you are on the bag side switches you over. Drop
+      a saved formulary here instead and it is attached to the open document rather than replacing
+      it &mdash; section 8 covers that.</p>
   </section>
 </div>
 
@@ -275,9 +286,20 @@
       (ampoules, ml, mg&hellip;) which is printed in the register's balance columns so a figure can
       never be read as the wrong measure.</p>
 
+    <h4>Restock at</h4>
+    <p>Optional, and worth setting. A box of 30 paracetamol holds 30 doses, but you would not run
+      it to nothing &mdash; put <strong>10</strong> here and the log shades every row from the
+      point where 10 doses are left, so signing into a shaded row is the signal to replace it. It
+      must be below the quantity held; a level equal to it would mean restocking the bag the day
+      it was packed, and is refused.</p>
+    <p>On a CD register the same field reads <strong>Reorder at</strong>, and is printed on the
+      front sheet and at the top of each register page. Balances there are written by hand, so
+      nothing is shaded &mdash; the level is stated for whoever is counting.</p>
+
     <h4>More than one batch of the same drug</h4>
     <p>Add it twice. Use the <strong>Copy</strong> button on an entry to prefill a new one with the
-      name, formulation and strength, then type the second batch, expiry and quantity. Each batch
+      name, formulation, strength and restock level, then type the second batch, expiry and
+      quantity. Each batch
       gets its own log page &mdash; and for a controlled drug its own running balance, which is
       what you want, since one balance cannot span two batches.</p>
 
@@ -340,8 +362,17 @@
     <p>If anything expires before the in-service date, a red band lists exactly what and when.</p>
     <p><strong>Each usage log</strong> repeats the medication, presentation, dose, batch and expiry
       at the top, then gives one numbered row per dose with date used, PRF number and a signature.
-      A medication with more doses than fit on a page is split evenly across pages rather than
-      leaving a stub.</p>
+      A <strong>doses left</strong> column is printed down the side, so the last signature tells
+      you what is in the bag without counting rows. A medication with more doses than fit on a page
+      is split evenly across pages rather than leaving a stub.</p>
+    <figure class="narrow">
+      <img src="build/shots/pdf-bag-log-restock.png" alt="A log page with the restock rows shaded">
+      <figcaption>Paracetamol, restocked at 10 doses: the shading starts where 10 are left.</figcaption>
+    </figure>
+    <p>Where a <strong>restock level</strong> is set, the log says so under the title and shades
+      every row from that point down &mdash; sign into a shaded row and that medication needs
+      replacing. The shading and its note are repeated on any continuation sheet, so a page on its
+      own still makes sense. The quantity on the label carries the level too.</p>
     <p>Every page footer carries the bag, the company, when the PDF was generated, and
       &ldquo;Page 3 of 9&rdquo; &mdash; so a missing sheet is obvious and you can tell two printouts
       apart.</p>
@@ -404,18 +435,26 @@
     <h2>8. The drug matrix</h2>
     <p>A drug matrix &mdash; a formulary &mdash; sets out which clinical grades may give which
       medication. It records no batches, expiry dates or quantities, because it describes what is
-      allowed rather than what is held.</p>
+      allowed rather than what is held. That is why it is a separate generator, on its own page:
+      press <strong>Drug matrix</strong> in the top bar to open it, and
+      <strong>&larr; Drug bag paperwork</strong> to come back. Each keeps its own saved work, so
+      neither disturbs the other.</p>
+    <p>It works like the bag side &mdash; details, then medications, then the PDF. What differs is
+      below.</p>
 
     <h3>Your clinical grades</h3>
     <figure class="tall">
       <img src="build/shots/matrix-grades.png" alt="The clinical grades card">
-      <figcaption>The clinical grades card, on the setup tab.</figcaption>
+      <figcaption>The clinical grades card, cut down to the five grades this example organisation
+        actually uses.</figcaption>
     </figure>
     <p>The list starts with a common set &mdash; first responder, FREC 3, emergency care assistant,
       FREC 4, AAP, EMT, FREUC 5, paramedic, APP, nurse, doctor &mdash; but organisations differ, so
-      it is only a starting point. <strong>Rename</strong> any grade, <strong>reorder</strong> them
-      with the arrows, <strong>remove</strong> the ones you do not use, and <strong>Add grade</strong>
-      for the ones you do. <strong>Restore the default list</strong> puts the original set back.</p>
+      it is only a starting point, and most will not use all eleven. <strong>Rename</strong> any
+      grade, <strong>reorder</strong> them with the arrows, <strong>remove</strong> the ones you do
+      not use, and <strong>Add grade</strong> for the ones you do.
+      <strong>Restore the default list</strong> puts the original set back. The example through the
+      rest of this section has been cut to five: FREC 3, FREC 4, EMT, paramedic and doctor.</p>
     <p>Each grade has a full name and a short label. The short label is what fits in the column
       heading; the full name is printed in the key underneath the table, so an abbreviation never
       has to be guessed at.</p>
@@ -438,9 +477,10 @@
         and quantity.</figcaption>
     </figure>
     <p>Quick add works exactly as it does elsewhere, filling in the name, formulation, strength and
-      suggested legal category. In place of the batch, expiry and quantity you get an
-      <strong>Indication</strong> box &mdash; what the medication is given for. Put each indication
-      on its own line and it prints as a bulleted list in the table.</p>
+      suggested legal category. Anything not in the catalogue &mdash; oxygen, in the example
+      opposite &mdash; is typed in by hand, as it is on the bag side. In place of the batch, expiry
+      and quantity you get an <strong>Indication</strong> box &mdash; what the medication is given
+      for. Put each indication on its own line and it prints as a bulleted list in the table.</p>
 
   </section>
 </div>
@@ -450,7 +490,8 @@
     <h3>Ticking who can give what</h3>
     <figure>
       <img src="build/shots/matrix-grid.png" alt="The matrix grid">
-      <figcaption>The grid. Green is allowed, red is not.</figcaption>
+      <figcaption>The grid. Green is allowed, red is not. Here FREC 3 carries oxygen and nothing
+        else, and each row above it starts one grade further along.</figcaption>
     </figure>
     <p>Click any cell to change it. Rather than clicking every cell one at a time, use the fill
       modes above the grid:</p>
@@ -463,7 +504,7 @@
     </ul>
     <p>Clicking a <strong>medication name</strong> fills or clears its whole row, and clicking a
       <strong>grade heading</strong> fills or clears that whole column. A drug everyone carries is
-      therefore one click, not eleven.</p>
+      therefore one click, not one per grade.</p>
   </section>
 </div>
 
@@ -493,7 +534,48 @@
   </section>
 </div>
 
-<!-- ============================ 8. CATEGORIES ============================ -->
+<div class="page">
+  <section>
+    <h3>Attaching a matrix to a drug bag</h3>
+    <p>A formulary on its own answers &ldquo;who may give what&rdquo;. Attached to a bag or
+      register, it answers that alongside &ldquo;what is in the bag&rdquo;, in one document.</p>
+    <ol class="steps">
+      <li>In the matrix generator, <strong>Export (.json)</strong> on the Generate tab.</li>
+      <li>On the drug bag side, open <strong>Setup</strong> and use <strong>Attach a formulary
+        (.json)</strong> on the <strong>Drug matrix (optional)</strong> card. Importing a formulary
+        through the ordinary <strong>Import</strong> button does the same thing, rather than
+        replacing the bag you have open.</li>
+    </ol>
+    <figure>
+      <img src="build/shots/formulary-attached.png" alt="An attached formulary">
+      <figcaption>The attached formulary, on the setup tab.</figcaption>
+    </figure>
+    <p>What is attached is a <strong>copy</strong>, taken at the moment you attach it. Change the
+      formulary afterwards and the bag still carries the old one until you export and attach it
+      again &mdash; usually what you want, since a bag that has gone out was prepared against a
+      particular version. The bag's own .json carries the copy too, so importing that bag next time
+      brings the matrix back with it. <strong>Remove</strong> takes it off again and leaves the
+      formulary itself untouched.</p>
+  </section>
+</div>
+
+<div class="page">
+  <section>
+    <figure class="compact">
+      <img src="build/shots/pdf-bag-matrix.png" alt="A bag PDF ending with the matrix">
+      <figcaption>With a matrix attached, the bag's PDF ends with it &mdash; wearing the bag's
+        company details and logo, but keeping the formulary's own reference, approval names and
+        dates.</figcaption>
+    </figure>
+    <div class="callout info">
+      <p><strong>It is still one document.</strong> The matrix sheets are numbered as part of the
+        bag's paperwork and carry the same footer, so a printed bundle cannot be split up by
+        accident.</p>
+    </div>
+  </section>
+</div>
+
+<!-- ============================ 9. CATEGORIES ============================ -->
 <div class="page">
   <section>
     <h2>9. Legal categories</h2>
@@ -523,7 +605,7 @@
   </section>
 </div>
 
-<!-- ============================ 9. SAVING ============================ -->
+<!-- ============================ 10. SAVING ============================ -->
 <div class="page">
   <section>
     <h2>10. Saving, reusing and backing up</h2>
@@ -556,7 +638,7 @@
   </section>
 </div>
 
-<!-- ============================ 10 & 11 ============================ -->
+<!-- ============================ 11 & 12 ============================ -->
 <div class="page">
   <section>
     <h2>11. Dark mode and phones</h2>
@@ -605,7 +687,7 @@
   </section>
 </div>
 
-<!-- ============================ 12. LEGAL ============================ -->
+<!-- ============================ 13. LEGAL ============================ -->
 <div class="page">
   <section>
     <h2>13. Disclaimer, licence and sources</h2>

@@ -6,21 +6,36 @@
   var OLD_KEY = "drug-bag-tracker/v1";
   var $ = function (id) { return document.getElementById(id); };
 
-  /*
-   * Two entirely separate documents. Controlled drugs live in the CD safe, not
-   * in a drug bag, so they never share a list with bag stock.
-   */
-  var state = {
-    mode: "bag",
-    docs: {
-      bag: { setup: {}, medications: [], meta: {} },
-      cd: { setup: {}, medications: [], meta: {} },
-      matrix: { setup: {}, medications: [], grades: null, meta: {} }
-    },
-    editing: null
-  };
+  /* Some controls only exist on one of the two pages. */
+  function on(id, fn) {
+    var el = $(id);
+    if (el) fn(el);
+    return !!el;
+  }
+  function hide(id, yes) { on(id, function (el) { el.hidden = !!yes; }); }
+  function setText(id, text) { on(id, function (el) { el.textContent = text; }); }
 
-  var MODES = ["bag", "cd", "matrix"];
+  /*
+   * This script drives both generators, and the page says which documents it
+   * owns: index.html the drug bag and the CD register, matrix.html the
+   * formulary. They share storage but never write over each other's document,
+   * so both can be open at once.
+   */
+  var MODES = (document.body.dataset.modes || "bag cd").trim().split(/\s+/);
+  var IS_MATRIX_PAGE = MODES.length === 1 && MODES[0] === "matrix";
+
+  function blankDoc(mode) {
+    var d = { setup: {}, medications: [], meta: {} };
+    if (mode === "matrix") d.grades = null;
+    return d;
+  }
+
+  /*
+   * Two entirely separate documents on the bag side. Controlled drugs live in
+   * the CD safe, not in a drug bag, so they never share a list with bag stock.
+   */
+  var state = { mode: MODES[0], docs: {}, editing: null };
+  MODES.forEach(function (m) { state.docs[m] = blankDoc(m); });
 
   function doc() { return state.docs[state.mode]; }
   function isCdMode() { return state.mode === "cd"; }
@@ -60,16 +75,19 @@
   }
 
   function grades() {
-    var d = state.docs.matrix;
+    var d = doc();
     if (!Array.isArray(d.grades)) d.grades = defaultGrades();
     return d.grades;
   }
 
-  var SETUP_FIELDS = [
+  var ALL_SETUP_FIELDS = [
     "companyName", "companyPhone", "companyAddress",
     "bagNumber", "preppedBy", "checkedBy", "preppedDate", "sealNumber",
     "safeLocation", "inServiceUntil", "cqcNumber"
   ];
+  /* A formulary has no seal or safe location, so its page does not carry the
+     fields. Whatever this page has is what gets read and written. */
+  var SETUP_FIELDS = ALL_SETUP_FIELDS.filter(function (f) { return !!$(f); });
 
   /* The company profile: everything that is about the organisation rather than
      a particular bag or safe, so it can be saved once and reused. */
@@ -97,6 +115,9 @@
       preppedDate: ["Prepped date", ""],
       checkedBy: ["Checked by", "Second person for the two-person check (optional)"],
       doses: ["Number of doses", "e.g. 12"],
+      restock: ["Restock at", "e.g. 10"],
+      restockHint: "Optional. How many doses may be left before this needs restocking. " +
+        "Printed on the log, with those rows shaded.",
       inService: ["In service until", ""],
       inServiceHint: "Optional. Expiry is then checked up to this date, so anything running " +
         "out while the bag is away is flagged.",
@@ -123,6 +144,9 @@
       preppedDate: ["Register opened", ""],
       checkedBy: ["Witness", "Second person for the stock check (optional)"],
       doses: ["Quantity held", "e.g. 10"],
+      restock: ["Reorder at", "e.g. 3"],
+      restockHint: "Optional. How much may be left before the safe is restocked. Printed on " +
+        "the front sheet and each register page.",
       inService: ["Check expiry up to", ""],
       inServiceHint: "Optional. Stock expiring before this date is flagged, so a review or " +
         "restock can be planned.",
@@ -149,6 +173,8 @@
       preppedDate: ["Approved date", ""],
       checkedBy: ["Checked by", "Second person who checked it (optional)"],
       doses: ["Number of doses", "e.g. 12"],
+      restock: ["Restock at", "e.g. 10"],
+      restockHint: "",
       inService: ["Review date", ""],
       inServiceHint: "Optional. Printed on the matrix so it is obvious when it is due a review.",
       quickHint: "Search the list to fill the form, then add what the medication is given " +
@@ -162,9 +188,15 @@
 
   function words() { return WORDS[state.mode]; }
 
+  /* What to call the open document in a sentence. */
+  function docNoun() {
+    return isMatrixMode() ? "formulary" : isCdMode() ? "register" : "bag";
+  }
+
   /* Relabel a field and its placeholder. */
   function relabel(inputId, spec) {
     var input = $(inputId);
+    if (!input) return;
     var span = input.parentNode.querySelector("span");
     var required = span.querySelector("b");
     span.textContent = spec[0] + " ";
@@ -185,34 +217,36 @@
     relabel("preppedDate", w.preppedDate);
     relabel("checkedBy", w.checkedBy);
     relabel("mDoses", w.doses);
+    relabel("mRestock", w.restock);
+    setText("mRestockHint", w.restockHint);
     relabel("inServiceUntil", w.inService);
-    $("inServiceHint").textContent = w.inServiceHint;
+    setText("inServiceHint", w.inServiceHint);
 
-    $("detailsTitle").textContent = w.detailsTitle;
-    $("contentsTitle").textContent = w.contentsTitle;
-    $("tabMedsLabel").textContent = w.tabMeds;
-    $("medEmpty").textContent = w.medEmpty;
-    $("saveTitle").textContent = w.saveTitle;
-    $("saveHint").textContent = w.saveHint;
-    $("generateHint").textContent = w.generateHint;
-    $("quickHint").textContent = w.quickHint;
-    $("checkedByHint").textContent = w.checkedByHint;
+    setText("detailsTitle", w.detailsTitle);
+    setText("contentsTitle", w.contentsTitle);
+    setText("tabMedsLabel", w.tabMeds);
+    setText("medEmpty", w.medEmpty);
+    setText("saveTitle", w.saveTitle);
+    setText("saveHint", w.saveHint);
+    setText("generateHint", w.generateHint);
+    setText("quickHint", w.quickHint);
+    setText("checkedByHint", w.checkedByHint);
 
     // Schedule and seal number are bag-only; safe location is CD-only.
-    $("f-mSchedule").hidden = isCdMode();
-    $("f-mUnit").hidden = !isCdMode();
-    $("f-sealNumber").hidden = !isBagMode();
-    $("f-safeLocation").hidden = !isCdMode();
+    hide("f-mSchedule", isCdMode());
+    hide("f-mUnit", !isCdMode());
+    hide("f-sealNumber", !isBagMode());
+    hide("f-safeLocation", !isCdMode());
 
     // A formulary records what may be given, not what is held: no batch,
     // expiry or quantity, but an indication and the grade matrix instead.
-    $("f-mIndication").hidden = !isMatrixMode();
-    $("f-mBatch").hidden = isMatrixMode();
-    $("f-mExpiry").hidden = isMatrixMode();
-    $("f-mDoses").hidden = isMatrixMode();
-    $("gradesCard").hidden = !isMatrixMode();
-    $("matrixCard").hidden = !isMatrixMode();
+    hide("f-mIndication", !isMatrixMode());
+    hide("f-mRestock", isMatrixMode());
+    hide("f-mBatch", isMatrixMode());
+    hide("f-mExpiry", isMatrixMode());
+    hide("f-mDoses", isMatrixMode());
     if (isMatrixMode()) renderGrades();
+    else renderFormulary();
   }
 
   function isBagMode() { return state.mode === "bag"; }
@@ -238,9 +272,22 @@
    * quota is full — a large logo makes that a real possibility). The work is
    * still usable in this session, so say so rather than failing silently.
    */
+  /*
+   * Merges into what is stored rather than replacing it, so the formulary page
+   * and the bag page can be open at once without either losing the other's
+   * work. Returns false when the browser refused to store (private browsing,
+   * or the quota is full — a large logo makes that a real possibility). The
+   * work is still usable in this session, so say so rather than failing
+   * silently.
+   */
   function save() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ mode: state.mode, docs: state.docs }));
+      var stored = {};
+      try { stored = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { stored = {}; }
+      if (!stored.docs || typeof stored.docs !== "object") stored.docs = {};
+      MODES.forEach(function (m) { stored.docs[m] = state.docs[m]; });
+      if (!IS_MATRIX_PAGE) stored.mode = state.mode;
+      localStorage.setItem(KEY, JSON.stringify(stored));
       state.storageFailed = false;
       return true;
     } catch (e) {
@@ -250,11 +297,13 @@
   }
 
   function readDoc(parsed) {
-    return {
+    var d = {
       setup: (parsed && parsed.setup) || {},
       medications: (parsed && Array.isArray(parsed.medications)) ? parsed.medications : [],
       meta: (parsed && parsed.meta) || {}
     };
+    if (parsed && parsed.formulary) d.formulary = parsed.formulary;
+    return d;
   }
 
   /* Record that this document has changed since it was last exported. */
@@ -281,18 +330,21 @@
     if (raw) {
       try {
         var parsed = JSON.parse(raw);
-        state.mode = MODES.indexOf(parsed.mode) >= 0 ? parsed.mode : "bag";
-        state.docs.bag = readDoc(parsed.docs && parsed.docs.bag);
-        state.docs.cd = readDoc(parsed.docs && parsed.docs.cd);
-        state.docs.matrix = readDoc(parsed.docs && parsed.docs.matrix);
-        var storedGrades = parsed.docs && parsed.docs.matrix && parsed.docs.matrix.grades;
-        state.docs.matrix.grades = Array.isArray(storedGrades) ? storedGrades : null;
+        var docs = parsed.docs || {};
+        if (MODES.indexOf(parsed.mode) >= 0) state.mode = parsed.mode;
+        MODES.forEach(function (m) {
+          state.docs[m] = readDoc(docs[m]);
+          if (m === "matrix") {
+            var g = docs.matrix && docs.matrix.grades;
+            state.docs.matrix.grades = Array.isArray(g) ? g : null;
+          }
+        });
       } catch (e) { /* ignore corrupt data */ }
       return;
     }
 
     // Migrate a v1 bag, moving any controlled drugs into the CD register.
-    if (old) {
+    if (old && !IS_MATRIX_PAGE) {
       try { state.docs.bag = splitLegacy(readDoc(JSON.parse(old))); }
       catch (e) { /* ignore corrupt data */ }
     }
@@ -318,7 +370,7 @@
     var before = JSON.stringify(setup);
     var wasInService = setup.inServiceUntil;
     SETUP_FIELDS.forEach(function (f) { setup[f] = $(f).value.trim(); });
-    setup.cqcRegistered = $("cqcRegistered").checked;
+    setup.cqcRegistered = !!($("cqcRegistered") && $("cqcRegistered").checked);
     if (JSON.stringify(setup) !== before) touch();
     save();
     // The service window decides every expiry flag, so the list needs redrawing.
@@ -329,7 +381,7 @@
   function fillSetup() {
     var setup = doc().setup;
     SETUP_FIELDS.forEach(function (f) { $(f).value = setup[f] || ""; });
-    $("cqcRegistered").checked = !!setup.cqcRegistered;
+    on("cqcRegistered", function (el) { el.checked = !!setup.cqcRegistered; });
     syncCqc();
     showLogo();
     resetLogoHint();
@@ -343,12 +395,14 @@
 
   function gradeError(text) {
     var box = $("gradeError");
+    if (!box) return;
     box.textContent = text || "";
     box.hidden = !text;
   }
 
   function renderGrades() {
     var list = $("gradeList");
+    if (!list) return;
     list.textContent = "";
     grades().forEach(function (g, i) {
       var row = document.createElement("div");
@@ -416,7 +470,7 @@
                  "\u201d and everything ticked against it?")) return;
     list.splice(index, 1);
     // Leave no orphaned permissions behind.
-    state.docs.matrix.medications.forEach(function (m) {
+    doc().medications.forEach(function (m) {
       if (m.allow) delete m.allow[g.id];
     });
     touch();
@@ -438,8 +492,8 @@
   function restoreDefaultGrades() {
     if (!confirm("Replace the grade list with the default one? Anything ticked against your " +
                  "current grades is lost.")) return;
-    state.docs.matrix.grades = defaultGrades();
-    state.docs.matrix.medications.forEach(function (m) { m.allow = {}; });
+    doc().grades = defaultGrades();
+    doc().medications.forEach(function (m) { m.allow = {}; });
     touch();
     save();
     renderGrades();
@@ -499,7 +553,7 @@
   }
 
   function fillColumn(gradeId) {
-    var meds = state.docs.matrix.medications;
+    var meds = doc().medications;
     var all = meds.every(function (m) { return allowed(m, gradeId); });
     meds.forEach(function (m) { setAllowed(m, gradeId, !all); });
     touch();
@@ -510,7 +564,8 @@
   function renderMatrix() {
     if (!isMatrixMode()) return;
     var table = $("matrixTable");
-    var meds = state.docs.matrix.medications;
+    if (!table) return;
+    var meds = doc().medications;
     var list = namedGrades();
     table.textContent = "";
     $("matrixEmpty").hidden = !(meds.length === 0 || list.length === 0);
@@ -568,6 +623,104 @@
       });
       table.appendChild(tr);
     });
+  }
+
+  /* ---------------- attached formulary ---------------- */
+  /*
+   * The matrix is made in its own generator (matrix.html) and exported as a
+   * .json. Attaching that file here keeps a copy with the bag or register, so
+   * the paperwork can carry the table as well: what is held, and who may give
+   * it, in one document.
+   */
+  function isFormulary(parsed) {
+    return !!parsed && typeof parsed === "object" && !Array.isArray(parsed) &&
+      parsed.mode === "matrix" && Array.isArray(parsed.medications) &&
+      Array.isArray(parsed.grades);
+  }
+
+  function formularyMessage(kind, text) {
+    on("formularyResult", function (box) {
+      box.className = "notice " + kind;
+      box.textContent = text;
+      box.hidden = false;
+    });
+  }
+
+  function namedIn(f) {
+    return (f.grades || []).filter(function (g) { return (g.name || "").trim(); });
+  }
+
+  function formularyRef(f) {
+    return ((f.setup && f.setup.bagNumber) || "").trim();
+  }
+
+  function renderFormulary() {
+    var f = doc().formulary;
+    hide("formularyRemove", !f);
+    on("formularyBtn", function (b) {
+      b.textContent = f ? "Attach a different formulary (.json)" : "Attach a formulary (.json)";
+    });
+    if (!f) {
+      hide("formularyResult", true);
+      return;
+    }
+    var meds = f.medications.length;
+    var gs = namedIn(f).length;
+    formularyMessage("good", "Formulary " + (formularyRef(f) || "\u2014") + " attached: " +
+      meds + " medication" + (meds === 1 ? "" : "s") + " across " +
+      gs + " grade" + (gs === 1 ? "" : "s") + ". Its table is printed at the end of this " +
+      "document.");
+  }
+
+  function attachFormulary(parsed, name) {
+    if (!namedIn(parsed).length || !parsed.medications.length) {
+      formularyMessage("bad", "\u201c" + name + "\u201d is a formulary, but it has no " +
+        "medications or no named grades, so there is nothing to print. Nothing has been " +
+        "attached.");
+      return false;
+    }
+    doc().formulary = {
+      setup: parsed.setup || {},
+      medications: parsed.medications,
+      grades: parsed.grades
+    };
+    touch();
+    save();
+    renderFormulary();
+    renderSummary();
+    return true;
+  }
+
+  function removeFormulary() {
+    delete doc().formulary;
+    touch();
+    save();
+    renderFormulary();
+    renderSummary();
+  }
+
+  function readFormularyFile(file) {
+    var reader = new FileReader();
+    reader.onerror = function () {
+      formularyMessage("bad", "That file could not be read.");
+    };
+    reader.onload = function () {
+      var parsed;
+      try {
+        parsed = JSON.parse(reader.result);
+      } catch (e) {
+        formularyMessage("bad", "\u201c" + file.name + "\u201d is not a valid .json file. " +
+          "Nothing has been attached.");
+        return;
+      }
+      if (!isFormulary(parsed)) {
+        formularyMessage("bad", "\u201c" + file.name + "\u201d is not a formulary exported " +
+          "from the drug matrix generator. Nothing has been attached.");
+        return;
+      }
+      attachFormulary(parsed, file.name);
+    };
+    reader.readAsText(file);
   }
 
   /* ---------------- company profile ---------------- */
@@ -921,7 +1074,7 @@
   }
 
   function resetLogoHint() {
-    logoMessage("", "PNG or JPEG, printed at the top of the label. Stored with this document " +
+    logoMessage("", "PNG or JPEG, printed at the top of the document. Stored with it " +
       "and included when you export it.");
   }
 
@@ -995,6 +1148,19 @@
   }
 
   /* ---------------- medications ---------------- */
+
+  /*
+   * The level this medication is restocked at, or null when none is set.
+   * Anything at or above the quantity held is ignored rather than trusted: it
+   * would mean the item needed restocking the moment it was packed.
+   */
+  function restockOf(med) {
+    var n = parseInt(med.restockAt, 10);
+    if (isNaN(n) || n < 0) return null;
+    var held = parseInt(med.doses, 10);
+    if (!isNaN(held) && n >= held) return null;
+    return n;
+  }
   function medFromForm() {
     var m = {
       name: $("mName").value.trim(),
@@ -1011,6 +1177,9 @@
     m.batch = $("mBatch").value.trim();
     m.expiry = expiryValue();
     m.doses = parseInt($("mDoses").value, 10);
+    // Blank means "no level set", which is not the same as 0 (run it to empty).
+    m.restockAt = $("mRestock").value.trim() === ""
+      ? null : parseInt($("mRestock").value, 10);
     m.unit = isCdMode() ? ($("mUnit").value.trim() || "ampoules") : "";
     return m;
   }
@@ -1031,11 +1200,22 @@
     var label = words().doses[0];
     if (!m.doses || m.doses < 1) return label + " must be at least 1.";
     if (m.doses > 200) return label + " is capped at 200 per medication.";
+    if (m.restockAt !== null) {
+      var restockLabel = words().restock[0];
+      if (isNaN(m.restockAt) || m.restockAt < 0) {
+        return restockLabel + " must be a whole number, or left blank.";
+      }
+      if (m.restockAt >= m.doses) {
+        return restockLabel + " must be below the " + label.toLowerCase() +
+          " \u2014 otherwise it needs restocking the moment it goes in.";
+      }
+    }
     return null;
   }
 
   function clearMedForm() {
-    ["mName", "mPresentation", "mDose", "mBatch", "mDoses", "mIndication"].forEach(function (id) {
+    ["mName", "mPresentation", "mDose", "mBatch", "mDoses", "mIndication",
+     "mRestock"].forEach(function (id) {
       $(id).value = "";
     });
     $("mExpiryPrecision").value = "month";
@@ -1060,6 +1240,7 @@
     $("mBatch").value = m.batch || "";
     setExpiryValue(m.expiry || "");
     $("mDoses").value = m.doses || "";
+    $("mRestock").value = restockOf(m) === null ? "" : String(restockOf(m));
     $("mSchedule").value = m.schedule || "GSL";
     $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
     updateExpiryEcho();
@@ -1083,6 +1264,7 @@
     $("mName").value = m.name;
     $("mPresentation").value = m.presentation;
     $("mDose").value = m.dose;
+    $("mRestock").value = restockOf(m) === null ? "" : String(restockOf(m));
     $("mSchedule").value = m.schedule || "GSL";
     $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
     $("medFormTitle").textContent = "Add another batch of " + m.name;
@@ -1178,9 +1360,13 @@
       meta.className = "med-meta";
       meta.textContent = isMatrixMode()
         ? m.presentation + " · " + m.dose + " · " +
-          (m.indication || "").split(/\n+/).filter(Boolean).join("; ")
+          (m.indication || "").split(/\n+/).map(function (line) {
+            return line.trim();
+          }).filter(Boolean).join(" \u2022 ")
         : m.presentation + " · " + m.dose + " · x" + m.doses +
           (isCdMode() ? " " + (m.unit || "held") : " dose" + (m.doses === 1 ? "" : "s")) +
+          (restockOf(m) === null ? ""
+            : " · " + (isCdMode() ? "reorder" : "restock") + " at " + restockOf(m)) +
           " · batch " + (m.batch || "—") +
           " · exp " + window.Expiry.format(parsed, m.expiry);
       main.appendChild(name);
@@ -1195,7 +1381,7 @@
        ["Edit", function () { startEdit(i); }, ""],
        ["Delete", function () {
           if (confirm("Remove " + m.name + " from this " +
-              (isMatrixMode() ? "formulary" : isCdMode() ? "register" : "bag") + "?")) {
+              docNoun() + "?")) {
             doc().medications.splice(i, 1);
             if (state.editing === i) clearMedForm();
             touch();
@@ -1226,7 +1412,7 @@
 
   function tickedCells() {
     var list = namedGrades();
-    return state.docs.matrix.medications.reduce(function (total, m) {
+    return doc().medications.reduce(function (total, m) {
       return total + list.filter(function (g) { return allowed(m, g.id); }).length;
     }, 0);
   }
@@ -1257,6 +1443,11 @@
           [isCdMode() ? "Total quantity held" : "Total logged doses", String(totalDoses)],
           ["Pages", String((isCdMode() ? 2 : 1) + doc().medications.length) + "+"]
         ];
+    if (!isMatrixMode() && doc().formulary) {
+      items.push(["Drug matrix",
+        "Attached" + (formularyRef(doc().formulary)
+          ? " (" + formularyRef(doc().formulary) + ")" : "")]);
+    }
     var box = $("summary");
     box.textContent = "";
     items.forEach(function (it) {
@@ -1283,7 +1474,7 @@
       var never = !(doc().meta || {}).exportedAt;
       backup.className = "notice warn";
       backup.textContent = never
-        ? "This " + (isCdMode() ? "register" : "bag") + " has never been exported. It lives only " +
+        ? "This " + docNoun() + " has never been exported. It lives only " +
           "in this browser, and clearing site data or using a private window will lose it \u2014 " +
           "export a copy to keep."
         : "Changed since the last export. Export again so your saved copy matches.";
@@ -1355,7 +1546,7 @@
   function showPdfReminder() {
     var box = $("pdfReminder");
     var text = $("pdfReminderText");
-    var what = isCdMode() ? "register" : "bag";
+    var what = docNoun();
     if (needsBackup()) {
       box.className = "notice warn reminder";
       text.textContent = "PDF downloaded. Save the .json copy too \u2014 a PDF cannot be loaded " +
@@ -1404,6 +1595,7 @@
     data.medications = doc().medications;
     data.mode = state.mode;
     if (isMatrixMode()) data.grades = namedGrades();
+    else if (doc().formulary) data.formulary = doc().formulary;
     return { data: data };
   }
 
@@ -1441,7 +1633,8 @@
     readSetup();
     var blob = new Blob([JSON.stringify({
       mode: state.mode, setup: doc().setup, medications: doc().medications,
-      grades: isMatrixMode() ? grades() : undefined
+      grades: isMatrixMode() ? grades() : undefined,
+      formulary: isMatrixMode() ? undefined : doc().formulary
     }, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
@@ -1474,7 +1667,7 @@
   /* Replacing the open document, so check there is nothing unsaved first. */
   function beginImport() {
     if (needsBackup()) {
-      var what = isCdMode() ? "CD register" : "drug bag";
+      var what = isMatrixMode() ? "formulary" : isCdMode() ? "CD register" : "drug bag";
       if (!confirm("Importing replaces the " + what + " you have open, and it has changes that " +
                    "have not been exported.\n\nImport anyway?")) return;
     }
@@ -1496,8 +1689,27 @@
         return;
       }
       if (!looksLikeSavedDocument(parsed)) {
-        importMessage("bad", "\u201c" + file.name + "\u201d is not a bag or register exported " +
+        importMessage("bad", "\u201c" + file.name + "\u201d is not a document exported " +
           "from this tool. Nothing has been changed.");
+        return;
+      }
+
+      // Each generator only opens its own kind of file. A formulary dropped on
+      // the bag side is attached to the bag instead, which is what it is for.
+      if (isFormulary(parsed) !== IS_MATRIX_PAGE) {
+        if (IS_MATRIX_PAGE) {
+          importMessage("bad", "\u201c" + file.name + "\u201d is a saved bag or register, not " +
+            "a formulary. Open it in the drug bag generator instead. Nothing has been changed.");
+          return;
+        }
+        if (attachFormulary(parsed, file.name)) {
+          importMessage("good", "\u201c" + file.name + "\u201d is a formulary, so it has been " +
+            "attached to this " + docNoun() + " rather than replacing " +
+            "it. Its table is printed at the end of the document.");
+        } else {
+          hide("importResult", true);
+        }
+        showTab("setup");
         return;
       }
 
@@ -1507,6 +1719,12 @@
       if (isMatrixMode()) {
         doc().grades = Array.isArray(parsed.grades) && parsed.grades.length
           ? parsed.grades : null;
+      } else if (parsed.formulary && isFormulary(
+          { mode: "matrix", medications: parsed.formulary.medications,
+            grades: parsed.formulary.grades })) {
+        doc().formulary = parsed.formulary;
+      } else {
+        delete doc().formulary;
       }
       doc().meta = { exportedAt: Date.now() };
       applyMode();
@@ -1518,11 +1736,12 @@
       showTab("setup");
 
       var n = doc().medications.length;
-      importMessage("good", "Loaded " + (isCdMode() ? "CD safe " : "drug bag ") +
-        (doc().setup.bagNumber || "\u2014") + " with " + n +
-        (isCdMode()
-          ? " controlled drug" + (n === 1 ? "" : "s")
-          : " medication" + (n === 1 ? "" : "s")) + ".");
+      var kind = isMatrixMode() ? "formulary " : isCdMode() ? "CD safe " : "drug bag ";
+      var counted = isCdMode()
+        ? " controlled drug" + (n === 1 ? "" : "s")
+        : " medication" + (n === 1 ? "" : "s");
+      importMessage("good", "Loaded " + kind + (doc().setup.bagNumber || "\u2014") +
+        " with " + n + counted + ".");
     };
     reader.readAsText(file);
   }
@@ -1590,11 +1809,6 @@
       }
       updateExpiryEcho();
     });
-    $("mSchedule").addEventListener("change", function () {
-      // Controlled drugs default to the register layout; still overridable.
-      if (this.value === "CD") $("mCdLog").checked = true;
-    });
-
     $("generateBtn").addEventListener("click", function () {
       withData(function (d) { window.DrugBagPDF.save(d); showPdfReminder(); });
     });
@@ -1636,6 +1850,24 @@
       readSetup();
       if (this.checked) $("cqcNumber").focus();
     });
+
+    // Attaching a matrix: bag and CD side only.
+    on("formularyBtn", function (b) {
+      b.addEventListener("click", function () { $("formularyFile").click(); });
+    });
+    on("formularyFile", function (f) {
+      f.addEventListener("change", function () {
+        if (this.files && this.files[0]) readFormularyFile(this.files[0]);
+        this.value = "";
+      });
+    });
+    on("formularyRemove", function (b) {
+      b.addEventListener("click", function () {
+        if (!confirm("Remove the attached formulary? The document will no longer carry the " +
+                     "matrix. The formulary itself is not affected.")) return;
+        removeFormulary();
+      });
+    });
     $("companyExportBtn").addEventListener("click", exportCompany);
     $("companyImportBtn").addEventListener("click", function () { $("companyFile").click(); });
     $("companyFile").addEventListener("change", function () {
@@ -1643,16 +1875,18 @@
       this.value = "";
     });
 
-    $("gradeAdd").addEventListener("click", addGrade);
-    $("gradeDefaults").addEventListener("click", restoreDefaultGrades);
+    on("gradeAdd", function (b) { b.addEventListener("click", addGrade); });
+    on("gradeDefaults", function (b) {
+      b.addEventListener("click", restoreDefaultGrades);
+    });
     document.querySelectorAll("[name=fillMode]").forEach(function (r) {
       r.addEventListener("change", function () {
-        $("fillModeHint").textContent =
+        setText("fillModeHint",
           r.value === "up"
             ? "A click allows that grade and every grade to its right, and clears the rest."
             : r.value === "down"
               ? "A click allows that grade and every grade to its left, and clears the rest."
-              : "A click flips a single cell between allowed and not.";
+              : "A click flips a single cell between allowed and not.");
       });
     });
 
@@ -1673,9 +1907,10 @@
     $("themeBtn").addEventListener("click", cycleTheme);
 
     $("resetAll").addEventListener("click", function () {
-      var what = isCdMode() ? "CD register" : "drug bag";
-      var message = "Clear the details and list for this " + what +
-        "? The other document is left alone.";
+      var what = isMatrixMode() ? "formulary" : isCdMode() ? "CD register" : "drug bag";
+      var message = "Clear the details and list for this " + what + "?" +
+        (IS_MATRIX_PAGE ? " The drug bag paperwork is left alone."
+                        : " The other document is left alone.");
       if (needsBackup()) {
         message = "This " + what + " has unsaved changes that have not been exported, and " +
           "clearing cannot be undone.\n\n" + message;
@@ -1685,16 +1920,23 @@
       doc().medications = [];
       doc().meta = {};
       if (isMatrixMode()) doc().grades = null;
+      else delete doc().formulary;
       $("companyResult").hidden = true;
       showLogo();
       resetLogoHint();
       SETUP_FIELDS.forEach(function (f) { $(f).value = ""; });
       fillSetup();
+      renderFormulary();
       clearMedForm();
       renderMeds();
       save();
       showTab("setup");
     });
+
+    // Says the stored document has been restored into the form. Navigating
+    // between the two generators is a page load, so a test — or anything
+    // watching — can wait for this rather than for a value to appear.
+    document.body.dataset.ready = "1";
   }
 
   document.addEventListener("DOMContentLoaded", init);

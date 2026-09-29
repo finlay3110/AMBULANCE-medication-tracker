@@ -22,6 +22,8 @@
   var RED = [176, 32, 32];
   var AMBER = [166, 108, 0];
   var CD_BG = [139, 26, 26];
+  var RESTOCK_BG = [253, 240, 214];   // the rows at or below the restock level
+  var RESTOCK_INK = [146, 94, 0];
 
   function expiryOf(med) {
     return global.Expiry ? global.Expiry.parse(med.expiry) : null;
@@ -130,6 +132,26 @@
   function unitHead(label, med) {
     var u = unitOf(med);
     return u ? label + " (" + u + ")" : label;
+  }
+
+  /*
+   * The level a medication is restocked at: how many doses may be left before
+   * it has to be replaced. Optional, and only meaningful below the quantity
+   * held — 0 means "run it to empty", which is not the same as "not set".
+   */
+  function restockAt(med) {
+    var n = parseInt(med.restockAt, 10);
+    if (isNaN(n) || n < 0) return null;
+    var held = parseInt(med.doses, 10);
+    if (!isNaN(held) && n >= held) return null;
+    return n;
+  }
+
+  function restockText(med) {
+    var n = restockAt(med);
+    if (n === null) return "";
+    var u = unitOf(med);
+    return n + " " + (u || (n === 1 ? "dose" : "doses")) + " left";
   }
 
   function quantityText(med) {
@@ -401,7 +423,8 @@
       var colour = SCHEDULE_COLOUR[sched] || SCHEDULE_COLOUR.GSL;
       y += drawRow(doc, PAGE.ml, y, widths, [
         { text: m.name },
-        { text: "x" + m.doses + (txt(m.dose) ? " " + m.dose : "") },
+        { text: "x" + m.doses + (txt(m.dose) ? " " + m.dose : "") +
+            (restockAt(m) === null ? "" : "\nrestock at " + restockAt(m)) },
         { text: m.presentation },
         { text: sched, bold: true, fill: colour, colour: [255, 255, 255], align: "center" },
         { text: m.batch || "—" },
@@ -493,6 +516,11 @@
   }
 
   /* PRESENTATION / DOSE / BATCH NO / EXPIRY strip. */
+  /*
+   * The strip under a log's title: label / value pairs across the page. Cells
+   * are sized to what they hold — an equal split truncated "Tablet" to "Table"
+   * once a fifth pair was added — with any slack shared out evenly.
+   */
   function logDetailBar(doc, data, med, y) {
     var pairs = [
       ["PRESENTATION", med.presentation],
@@ -500,12 +528,30 @@
       ["BATCH NO", med.batch || "\u2014"],
       ["EXPIRY", expiryText(med)]
     ];
+    if (restockAt(med) !== null) {
+      pairs.push([isCdDoc(data) ? "REORDER AT" : "RESTOCK AT", restockText(med)]);
+    }
     var barH = 8;
-    var cx = PAGE.ml;
-    var cellW = CONTENT_W / pairs.length;
-    pairs.forEach(function (p, i) {
+
+    var parts = pairs.map(function (p) {
       setFont(doc, 7.5, "bold");
       var labelW = doc.getTextWidth(p[0]) + 5;
+      setFont(doc, 8.5, "bold");
+      return { labelW: labelW, valueW: doc.getTextWidth(txt(p[1])) + 5 };
+    });
+    var needed = parts.reduce(function (t, c) { return t + c.labelW + c.valueW; }, 0);
+    var slack = (CONTENT_W - needed) / pairs.length;
+
+    var cx = PAGE.ml;
+    pairs.forEach(function (p, i) {
+      // Too much to fit: fall back to an equal share and let the value wrap.
+      var cellW = slack >= 0
+        ? parts[i].labelW + parts[i].valueW + slack
+        : CONTENT_W / pairs.length;
+      if (i === pairs.length - 1) cellW = PAGE.w - PAGE.mr - cx;
+      var labelW = Math.min(parts[i].labelW, cellW - 6);
+
+      setFont(doc, 7.5, "bold");
       doc.setFillColor(BAR_BG[0], BAR_BG[1], BAR_BG[2]);
       doc.rect(cx, y, labelW, barH, "F");
       doc.setTextColor(255, 255, 255);
@@ -513,7 +559,7 @@
 
       doc.setFillColor(213, 216, 220);
       doc.rect(cx + labelW, y, cellW - labelW, barH, "F");
-      var vc = (i === 3 && expiryColour(med, data.inServiceUntil)) || INK;
+      var vc = (p[0] === "EXPIRY" && expiryColour(med, data.inServiceUntil)) || INK;
       doc.setTextColor(vc[0], vc[1], vc[2]);
       setFont(doc, 8.5, "bold");
       doc.text(wrap(doc, p[1], cellW - labelW - 4)[0], cx + labelW + 2.5, y + 5.4);
@@ -568,23 +614,62 @@
 
   /* ---- standard usage log ---- */
   function drawLog(doc, data, med, state) {
+    var held = Math.max(1, parseInt(med.doses, 10) || 1);
+    var level = restockAt(med);
+
+    /*
+     * DOSES LEFT is printed for every row, so a glance at the last signature
+     * says what is in the bag without counting. Where a restock level is set,
+     * the rows from that point down are shaded: sign into a shaded row and the
+     * bag needs restocking.
+     */
+    function legend(y) {
+      if (level === null) return 0;
+      var h = 7;
+      doc.setFillColor(RESTOCK_BG[0], RESTOCK_BG[1], RESTOCK_BG[2]);
+      doc.setDrawColor(RESTOCK_INK[0], RESTOCK_INK[1], RESTOCK_INK[2]);
+      doc.setLineWidth(0.3);
+      doc.rect(PAGE.ml, y, CONTENT_W, h, "FD");
+      doc.setTextColor(RESTOCK_INK[0], RESTOCK_INK[1], RESTOCK_INK[2]);
+      setFont(doc, 8.5, "bold");
+      doc.text("RESTOCK AT " + restockText(med).toUpperCase(), PAGE.ml + 3, y + 4.8);
+      setFont(doc, 8.5, "normal");
+      doc.text("\u2014 the shaded rows below. Replace this medication once one is signed.",
+        PAGE.ml + 3 + doc.getTextWidth("RESTOCK AT " + restockText(med).toUpperCase()) + 2,
+        y + 4.8);
+      doc.setTextColor(INK[0], INK[1], INK[2]);
+      return h + 2;
+    }
+
     drawPaginatedLog(doc, data, med, state, {
-      widths: [16, 40, 40, 90], // NO | DATE USED | PRF NO | SIGNED = 186
-      header: ["NO", "DATE USED", "PRF NO", "SIGNED"],
-      headAlign: ["center", "left", "left", "left"],
-      rowCount: Math.max(1, parseInt(med.doses, 10) || 1),
+      // NO | DATE USED | PRF NO | SIGNED | DOSES LEFT = 186
+      widths: [14, 36, 34, 80, 22],
+      header: ["NO", "DATE USED", "PRF NO", "SIGNED", "DOSES LEFT"],
+      headSize: 8.5,
+      headAlign: ["center", "left", "left", "left", "center"],
+      rowCount: held,
       row: function (n) {
+        var left = held - n;
+        var low = level !== null && left <= level;
+        var fill = low ? RESTOCK_BG : null;
         return [
-          { text: String(n), bold: true, align: "center" },
-          { text: "" }, { text: "" }, { text: "" }
+          { text: String(n), bold: true, align: "center", fill: fill },
+          { text: "", fill: fill }, { text: "", fill: fill }, { text: "", fill: fill },
+          { text: String(left), align: "center", bold: low,
+            colour: low ? RESTOCK_INK : null, fill: fill }
         ];
       },
-      contHeadH: 8,
-      firstHead: function (y) { return logDetailBar(doc, data, med, logTitle(doc, data, med, y)) + 7; },
+      contHeadH: level === null ? 8 : 17,
+      firstHead: function (y) {
+        var afterBar = logDetailBar(doc, data, med, logTitle(doc, data, med, y));
+        if (level === null) return afterBar + 7;
+        return afterBar + 5 + legend(afterBar + 5);
+      },
       contHead: function (y) {
         setFont(doc, 10, "bold");
         doc.text(pageTitle(data, med) + " (continued)", PAGE.ml, y + 4);
-        return y + 8;
+        if (level === null) return y + 8;
+        return y + 8 + legend(y + 8);
       }
     });
   }
@@ -704,7 +789,9 @@
         { text: m.name },
         { text: m.presentation },
         { text: m.dose },
-        { text: quantityText(m), bold: true, align: "center" },
+        { text: quantityText(m) +
+            (restockAt(m) === null ? "" : "\nreorder at " + restockAt(m)),
+          bold: true, align: "center" },
         { text: m.batch || "\u2014" },
         { text: expiryText(m), colour: expiryColour(m, data.inServiceUntil),
           bold: !!expiryColour(m, data.inServiceUntil) }
@@ -979,25 +1066,26 @@
     var header = ["Medication name", "Indication", "Formulation(s)", "Strength"]
       .concat(list.map(function (g) { return txt(g.abbr) || txt(g.name); }));
 
-    /* A column heading is unreadable once it wraps mid-word ("FREU" / "C 5"),
-       so shrink the heading until each word fits the column instead. */
-    function headingSize(text, width) {
+    /* Text is unreadable once it wraps mid-word ("FREU" / "C 5", or a strength
+       broken as "2.5mg/2.5m" / "l"), so shrink it until each word fits the
+       column instead. drawRow wraps at width - padX * 2. */
+    function fitSize(text, width, base, min, bold) {
       var words = String(text).split(/\s+/);
-      for (var size = 7.5; size > 5; size -= 0.5) {
-        setFont(doc, size, "bold");
+      for (var size = base; size > min; size -= 0.5) {
+        setFont(doc, size, bold ? "bold" : "normal");
         var fits = words.every(function (w) {
           return doc.getTextWidth(w) <= width - 3.8;
         });
         if (fits) return size;
       }
-      return 5;
+      return min;
     }
 
     function headerRow(y) {
       return drawRow(doc, PAGE.ml, y, widths, header.map(function (h, i) {
         return {
           text: h, bold: true, fill: MATRIX_BG, colour: [255, 255, 255],
-          size: i < 4 ? 8.5 : headingSize(h, gradeW),
+          size: i < 4 ? 8.5 : fitSize(h, gradeW, 7.5, 5, true),
           align: i < 4 ? "left" : "center"
         };
       }), { minH: 9 });
@@ -1055,7 +1143,7 @@
         { text: m.name, size: 8.5 },
         { text: lines.join("\n"), size: 8.5 },
         { text: m.presentation, size: 8.5 },
-        { text: m.dose, size: 8.5, align: "center" }
+        { text: m.dose, size: fitSize(txt(m.dose), strengthW, 8.5, 6), align: "center" }
       ].concat(list.map(function (g) {
         return { text: "", fill: gradeAllows(m, g) ? YES_BG : NO_BG };
       }));
@@ -1170,6 +1258,35 @@
 
   /* ------------------------------------------------------------------ */
 
+  /*
+   * A formulary attached to a bag or register, printed after its own pages:
+   * what is held, then who may give it, in one document. The matrix keeps its
+   * own reference, approval names and dates, but wears the document's company
+   * details and logo, because it is that document's paperwork.
+   */
+  function drawAttachedMatrix(doc, data, state) {
+    var f = data.formulary;
+    if (!f || !Array.isArray(f.medications) || !f.medications.length) return;
+    var named = (f.grades || []).filter(function (g) { return txt(g.name); });
+    if (!named.length) return;
+
+    var setup = f.setup || {};
+    drawMatrix(doc, {
+      mode: "matrix",
+      companyName: data.companyName,
+      cqcRegistered: data.cqcRegistered,
+      cqcNumber: data.cqcNumber,
+      logo: data.logo, logoW: data.logoW, logoH: data.logoH,
+      bagNumber: setup.bagNumber,
+      preppedBy: setup.preppedBy,
+      checkedBy: setup.checkedBy,
+      preppedDate: setup.preppedDate,
+      inServiceUntil: setup.inServiceUntil,
+      medications: f.medications,
+      grades: named
+    }, state);
+  }
+
   function build(data) {
     var jsPDF = (global.jspdf && global.jspdf.jsPDF) || global.jsPDF;
     if (!jsPDF) throw new Error("jsPDF failed to load.");
@@ -1208,6 +1325,7 @@
       drawLabel(doc, data, state);
       data.medications.forEach(function (m) { drawLog(doc, data, m, state); });
     }
+    if (!isMatrixDoc(data)) drawAttachedMatrix(doc, data, state);
     stampFooters(doc, data, state);
     return doc;
   }
