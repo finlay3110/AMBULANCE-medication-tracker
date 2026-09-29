@@ -115,6 +115,9 @@
       preppedDate: ["Prepped date", ""],
       checkedBy: ["Checked by", "Second person for the two-person check (optional)"],
       doses: ["Number of doses", "e.g. 12"],
+      restock: ["Restock at", "e.g. 10"],
+      restockHint: "Optional. How many doses may be left before this needs restocking. " +
+        "Printed on the log, with those rows shaded.",
       inService: ["In service until", ""],
       inServiceHint: "Optional. Expiry is then checked up to this date, so anything running " +
         "out while the bag is away is flagged.",
@@ -141,6 +144,9 @@
       preppedDate: ["Register opened", ""],
       checkedBy: ["Witness", "Second person for the stock check (optional)"],
       doses: ["Quantity held", "e.g. 10"],
+      restock: ["Reorder at", "e.g. 3"],
+      restockHint: "Optional. How much may be left before the safe is restocked. Printed on " +
+        "the front sheet and each register page.",
       inService: ["Check expiry up to", ""],
       inServiceHint: "Optional. Stock expiring before this date is flagged, so a review or " +
         "restock can be planned.",
@@ -167,6 +173,8 @@
       preppedDate: ["Approved date", ""],
       checkedBy: ["Checked by", "Second person who checked it (optional)"],
       doses: ["Number of doses", "e.g. 12"],
+      restock: ["Restock at", "e.g. 10"],
+      restockHint: "",
       inService: ["Review date", ""],
       inServiceHint: "Optional. Printed on the matrix so it is obvious when it is due a review.",
       quickHint: "Search the list to fill the form, then add what the medication is given " +
@@ -209,6 +217,8 @@
     relabel("preppedDate", w.preppedDate);
     relabel("checkedBy", w.checkedBy);
     relabel("mDoses", w.doses);
+    relabel("mRestock", w.restock);
+    setText("mRestockHint", w.restockHint);
     relabel("inServiceUntil", w.inService);
     setText("inServiceHint", w.inServiceHint);
 
@@ -231,6 +241,7 @@
     // A formulary records what may be given, not what is held: no batch,
     // expiry or quantity, but an indication and the grade matrix instead.
     hide("f-mIndication", !isMatrixMode());
+    hide("f-mRestock", isMatrixMode());
     hide("f-mBatch", isMatrixMode());
     hide("f-mExpiry", isMatrixMode());
     hide("f-mDoses", isMatrixMode());
@@ -1137,6 +1148,19 @@
   }
 
   /* ---------------- medications ---------------- */
+
+  /*
+   * The level this medication is restocked at, or null when none is set.
+   * Anything at or above the quantity held is ignored rather than trusted: it
+   * would mean the item needed restocking the moment it was packed.
+   */
+  function restockOf(med) {
+    var n = parseInt(med.restockAt, 10);
+    if (isNaN(n) || n < 0) return null;
+    var held = parseInt(med.doses, 10);
+    if (!isNaN(held) && n >= held) return null;
+    return n;
+  }
   function medFromForm() {
     var m = {
       name: $("mName").value.trim(),
@@ -1153,6 +1177,9 @@
     m.batch = $("mBatch").value.trim();
     m.expiry = expiryValue();
     m.doses = parseInt($("mDoses").value, 10);
+    // Blank means "no level set", which is not the same as 0 (run it to empty).
+    m.restockAt = $("mRestock").value.trim() === ""
+      ? null : parseInt($("mRestock").value, 10);
     m.unit = isCdMode() ? ($("mUnit").value.trim() || "ampoules") : "";
     return m;
   }
@@ -1173,11 +1200,22 @@
     var label = words().doses[0];
     if (!m.doses || m.doses < 1) return label + " must be at least 1.";
     if (m.doses > 200) return label + " is capped at 200 per medication.";
+    if (m.restockAt !== null) {
+      var restockLabel = words().restock[0];
+      if (isNaN(m.restockAt) || m.restockAt < 0) {
+        return restockLabel + " must be a whole number, or left blank.";
+      }
+      if (m.restockAt >= m.doses) {
+        return restockLabel + " must be below the " + label.toLowerCase() +
+          " \u2014 otherwise it needs restocking the moment it goes in.";
+      }
+    }
     return null;
   }
 
   function clearMedForm() {
-    ["mName", "mPresentation", "mDose", "mBatch", "mDoses", "mIndication"].forEach(function (id) {
+    ["mName", "mPresentation", "mDose", "mBatch", "mDoses", "mIndication",
+     "mRestock"].forEach(function (id) {
       $(id).value = "";
     });
     $("mExpiryPrecision").value = "month";
@@ -1202,6 +1240,7 @@
     $("mBatch").value = m.batch || "";
     setExpiryValue(m.expiry || "");
     $("mDoses").value = m.doses || "";
+    $("mRestock").value = restockOf(m) === null ? "" : String(restockOf(m));
     $("mSchedule").value = m.schedule || "GSL";
     $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
     updateExpiryEcho();
@@ -1225,6 +1264,7 @@
     $("mName").value = m.name;
     $("mPresentation").value = m.presentation;
     $("mDose").value = m.dose;
+    $("mRestock").value = restockOf(m) === null ? "" : String(restockOf(m));
     $("mSchedule").value = m.schedule || "GSL";
     $("mUnit").value = m.unit || (isCdMode() ? "ampoules" : "");
     $("medFormTitle").textContent = "Add another batch of " + m.name;
@@ -1325,6 +1365,8 @@
           }).filter(Boolean).join(" \u2022 ")
         : m.presentation + " · " + m.dose + " · x" + m.doses +
           (isCdMode() ? " " + (m.unit || "held") : " dose" + (m.doses === 1 ? "" : "s")) +
+          (restockOf(m) === null ? ""
+            : " · " + (isCdMode() ? "reorder" : "restock") + " at " + restockOf(m)) +
           " · batch " + (m.batch || "—") +
           " · exp " + window.Expiry.format(parsed, m.expiry);
       main.appendChild(name);

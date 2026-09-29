@@ -76,7 +76,7 @@ async function capture(browser) {
       await page.fill("#mExpiryMonth", value);
     }
   }
-  async function quickAdd(query, batch, expiry, qty, unit) {
+  async function quickAdd(query, batch, expiry, qty, unit, restock) {
     await page.fill("#quickAdd", query);
     await page.waitForSelector("#quickResults li");
     await page.click("#quickResults li:first-child");
@@ -84,6 +84,7 @@ async function capture(browser) {
     await setExpiry(expiry);
     await page.fill("#mDoses", String(qty));
     if (unit) await page.fill("#mUnit", unit);
+    if (restock !== undefined) await page.fill("#mRestock", String(restock));
     await page.click("#medSubmit");
   }
 
@@ -120,12 +121,12 @@ async function capture(browser) {
   await page.fill("#quickAdd", "");
   await blur();
 
-  await quickAdd("paracetamol tablet", "22060215", "2027-10", 32);
-  await quickAdd("aspirin", "ASP771", "2027-07", 28);
-  await quickAdd("ibuprofen", "IBU7741", "2027-01", 32);
-  await quickAdd("glucose gel", "GG2210", "2027-02", 3);
+  await quickAdd("paracetamol tablet", "22060215", "2027-10", 32, "", 10);
+  await quickAdd("aspirin", "ASP771", "2027-07", 28, "", 8);
+  await quickAdd("ibuprofen", "IBU7741", "2027-01", 32, "", 10);
+  await quickAdd("glucose gel", "GG2210", "2027-02", 3, "", 1);
   await quickAdd("naloxone 2mg pre", "0142723", "2026-10-18", 2);
-  await quickAdd("ondansetron", "OND4413", "2027-11", 5);
+  await quickAdd("ondansetron", "OND4413", "2027-11", 5, "", 2);
   await blur();
   await shot(page.locator("#panel-meds .card").nth(1), "med-form");
   await shot(page.locator("#panel-meds .card").nth(2), "med-list");
@@ -159,9 +160,9 @@ async function capture(browser) {
   await shot(page, "cd-setup");
 
   await page.click('[data-tab="meds"]');
-  await quickAdd("morphine ampoule", "MOR2291", "2027-12", 10, "ampoules");
-  await quickAdd("morphine ampoule", "MOR3310", "2028-04", 6, "ampoules");
-  await quickAdd("midazolam 5mg/1ml", "MZ4410", "2027-05", 5, "ampoules");
+  await quickAdd("morphine ampoule", "MOR2291", "2027-12", 10, "ampoules", 3);
+  await quickAdd("morphine ampoule", "MOR3310", "2028-04", 6, "ampoules", 2);
+  await quickAdd("midazolam 5mg/1ml", "MZ4410", "2027-05", 5, "ampoules", 2);
   await blur();
   await shot(page.locator("#panel-meds .card").nth(2), "cd-list");
 
@@ -308,6 +309,7 @@ function renderPdfPages(pdfs) {
   const args = [path.join(__dirname, "render-pages.py"), SHOTS,
     pdfs.bagPdf, "0", "pdf-bag-label",
     pdfs.bagPdf, "1", "pdf-bag-log",
+    pdfs.bagPdf, "2", "pdf-bag-log-restock",
     pdfs.cdPdf, "0", "pdf-cd-front",
     pdfs.cdPdf, "1", "pdf-cd-register",
     pdfs.cdPdf, "-2", "pdf-cd-stockcheck",

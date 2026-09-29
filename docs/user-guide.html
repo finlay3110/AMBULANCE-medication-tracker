@@ -286,9 +286,20 @@
       (ampoules, ml, mg&hellip;) which is printed in the register's balance columns so a figure can
       never be read as the wrong measure.</p>
 
+    <h4>Restock at</h4>
+    <p>Optional, and worth setting. A box of 30 paracetamol holds 30 doses, but you would not run
+      it to nothing &mdash; put <strong>10</strong> here and the log shades every row from the
+      point where 10 doses are left, so signing into a shaded row is the signal to replace it. It
+      must be below the quantity held; a level equal to it would mean restocking the bag the day
+      it was packed, and is refused.</p>
+    <p>On a CD register the same field reads <strong>Reorder at</strong>, and is printed on the
+      front sheet and at the top of each register page. Balances there are written by hand, so
+      nothing is shaded &mdash; the level is stated for whoever is counting.</p>
+
     <h4>More than one batch of the same drug</h4>
     <p>Add it twice. Use the <strong>Copy</strong> button on an entry to prefill a new one with the
-      name, formulation and strength, then type the second batch, expiry and quantity. Each batch
+      name, formulation, strength and restock level, then type the second batch, expiry and
+      quantity. Each batch
       gets its own log page &mdash; and for a controlled drug its own running balance, which is
       what you want, since one balance cannot span two batches.</p>
 
@@ -351,8 +362,17 @@
     <p>If anything expires before the in-service date, a red band lists exactly what and when.</p>
     <p><strong>Each usage log</strong> repeats the medication, presentation, dose, batch and expiry
       at the top, then gives one numbered row per dose with date used, PRF number and a signature.
-      A medication with more doses than fit on a page is split evenly across pages rather than
-      leaving a stub.</p>
+      A <strong>doses left</strong> column is printed down the side, so the last signature tells
+      you what is in the bag without counting rows. A medication with more doses than fit on a page
+      is split evenly across pages rather than leaving a stub.</p>
+    <figure class="narrow">
+      <img src="build/shots/pdf-bag-log-restock.png" alt="A log page with the restock rows shaded">
+      <figcaption>Paracetamol, restocked at 10 doses: the shading starts where 10 are left.</figcaption>
+    </figure>
+    <p>Where a <strong>restock level</strong> is set, the log says so under the title and shades
+      every row from that point down &mdash; sign into a shaded row and that medication needs
+      replacing. The shading and its note are repeated on any continuation sheet, so a page on its
+      own still makes sense. The quantity on the label carries the level too.</p>
     <p>Every page footer carries the bag, the company, when the PDF was generated, and
       &ldquo;Page 3 of 9&rdquo; &mdash; so a missing sheet is obvious and you can tell two printouts
       apart.</p>
