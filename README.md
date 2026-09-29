@@ -138,6 +138,32 @@ name on the label and the register front sheet. Leave it off and nothing about
 CQC appears anywhere. A ticked box with no number blocks generation, rather than
 printing a claim with nothing behind it.
 
+### Restock levels
+
+A box of 30 paracetamol holds 30 doses, but nobody runs it to nothing. Each
+medication takes an optional **restock at** level — how many doses may be left
+before it has to be replaced.
+
+It is printed where it is needed rather than buried in a setting:
+
+- the **bag label** shows it under the quantity (`x30 500mg` / `restock at 10`);
+- the **usage log** gains a `DOSES LEFT` column, counting down as the numbered
+  rows are signed, so the last signature says what is in the bag without anyone
+  counting;
+- every row from the restock point down is **shaded**, under a band reading
+  *RESTOCK AT 10 DOSES LEFT — the shaded rows below*. Sign into a shaded row and
+  that medication needs replacing. Both are repeated on continuation sheets, so a
+  page on its own still makes sense.
+
+A level must be below the quantity held — equal to it would mean restocking the
+bag the day it was packed — and is refused with that reason. Blank means no
+level, which is not the same as `0` (run it to empty). A copied batch inherits
+the level along with the name and strength.
+
+On a CD register the field reads **reorder at** and is printed on the front sheet
+and at the top of each register page. Balances there are handwritten, so nothing
+is shaded; the level is stated for whoever is counting.
+
 ### Batches
 
 Each batch is held as its own entry, so a drug held in two batches is added
@@ -280,12 +306,13 @@ Screen only — the generated PDF is a printed document and stays light.
 | `LICENSE` | MIT licence |
 | `docs/build-guide.js` | Builds the user guide PDF from the live app |
 | `docs/user-guide.html` | The guide's text and layout |
+| `Drug-Bag-Tracker-User-Guide.pdf` | The built guide, committed so it can be read without building it |
 | `test/smoke.js` | Smoke test: expiry parser, app flow, PDF page counts and margins |
 | `vendor/jspdf.umd.min.js` | Bundled jsPDF build (MIT, see `vendor/jspdf-LICENSE.txt`) |
 
 ## User guide
 
-A 28-page illustrated guide is generated from the app itself, so its screenshots
+A 29-page illustrated guide is generated from the app itself, so its screenshots
 are never out of date:
 
 ```
@@ -296,8 +323,8 @@ npm run guide          # writes Drug-Bag-Tracker-User-Guide.pdf
 `docs/build-guide.js` drives the real app in a browser, captures every figure,
 generates sample documents, and renders `docs/user-guide.html` to A4. The sample
 PDF pages need python3 with `pypdfium2`; without it the guide still builds, minus
-those figures. Everything it writes is git-ignored — rebuild it rather than
-committing a stale copy.
+those figures. The intermediate screenshots in `docs/build/` are git-ignored; the
+finished PDF is committed, so rebuild and commit it whenever the app changes.
 
 ## Tests
 
